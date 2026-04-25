@@ -14,8 +14,8 @@ include-package-data = true
 zip-safe = false
 
 [tool.setuptools.package-dir]
-"" = "source/leisaac"
+"" = "src"
 
 [tool.setuptools.packages.find]
-where = ["source/leisaac"]
+where = ["src"]
 include = ["leisaac*"]

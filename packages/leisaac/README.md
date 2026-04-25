@@ -4,5 +4,5 @@ This workspace member contains only the AICapstone-specific `leisaac` extensions
 
 Current scope:
 
-- `source/leisaac/leisaac/tasks/cup_stacking/`
-- `source/leisaac/leisaac/tasks/template/single_arm_franka_cfg.py`
+- `src/leisaac/tasks/cup_stacking/`
+- `src/leisaac/tasks/template/single_arm_franka_cfg.py`
