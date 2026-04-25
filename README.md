@@ -4,19 +4,19 @@ This repository is the single home for the MVP.
 
 ## Layout
 
-- `umi/`: vendored from `voilab/packages/umi`
-- `source/leisaac/leisaac/tasks/cup_stacking/`: MVP-owned task extension copied into `aicapstone`
-- `source/leisaac/leisaac/tasks/template/single_arm_franka_cfg.py`: MVP-owned base config extension copied into `aicapstone`
+- `packages/umi/`: flat-vendored from `voilab/packages/umi`
+- `packages/leisaac/`: flat-vendored from `author31/leisaac` branch `feat/add-joint-position-action-space`
 - `scripts/`: vendored root-level workflow scripts from `voilab/scripts`
 - `data/`: runtime dataset directory tracked with `.gitkeep`
 - `checkpoints/`: runtime model directory tracked with `.gitkeep`
+- `Makefile`, `Dockerfile`, and `pyproject.toml`: root workspace scaffolding
 
-## Dependency Entry Point
+## Workspace Root
 
-Use the single top-level `pyproject.toml` as the dependency entrypoint for follow-on work:
+The repository root is the uv workspace root. Install the workspace from the repo root:
 
 ```bash
 uv sync
 ```
 
-`leisaac` is consumed as a dependency from branch `feat/add-joint-position-action-space`, while the local extension sources live under `source/leisaac` and are loaded ahead of the installed package.
+The root `pyproject.toml` wires `umi` and `leisaac` through `[tool.uv.workspace]` and `[tool.uv.sources]`, while each workspace member keeps its own `pyproject.toml` under `packages/`.

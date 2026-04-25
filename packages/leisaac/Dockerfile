@@ -1,0 +1,117 @@
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTHON_VERSION=3.11
+
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=all \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    ACCEPT_EULA=Y \
+    TERM=xterm-256color
+
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        libasound2 \
+        libdbus-1-3 \
+        libegl1 \
+        libfontconfig1 \
+        libgl1 \
+        libglu1-mesa \
+        libglib2.0-0 \
+        libgtk-3-0 \
+        libice6 \
+        libnss3 \
+        libsm6 \
+        libvulkan1 \
+        libx11-6 \
+        libx11-xcb1 \
+        libxcb-cursor0 \
+        libxcb-icccm4 \
+        libxcb-image0 \
+        libxcb-keysyms1 \
+        libxcb-render-util0 \
+        libxcb-xinerama0 \
+        libxcb-xkb1 \
+        libxcursor1 \
+        libxext6 \
+        libxi6 \
+        libxinerama1 \
+        libxkbcommon-x11-0 \
+        libxrandr2 \
+        libxrender1 \
+        libxt6 \
+        libxtst6 \
+        libxxf86vm1 \
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-dev \
+        python${PYTHON_VERSION}-distutils \
+        python${PYTHON_VERSION}-venv \
+        unzip \
+        vulkan-tools \
+        wget \
+    && ln -sf /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
+    && ln -sf /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python3 \
+    && curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+    && python /tmp/get-pip.py \
+    && rm -f /tmp/get-pip.py \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /workspace/leisaac
+
+RUN python -m pip install --upgrade pip \
+    && python -m pip install -U \
+        torch==2.7.0 \
+        torchvision==0.22.0 \
+        --index-url https://download.pytorch.org/whl/cu128 \
+    && python -m pip install --upgrade \
+        "isaacsim[all,extscache]==5.1.0" \
+        --extra-index-url https://pypi.nvidia.com \
+    && python -m pip install \
+        pip==23 \
+        setuptools==65 \
+        flatdict==4.0.0 \
+        huggingface-hub==0.35.3 \
+        transformers==4.57.6
+
+COPY . /workspace/leisaac
+
+RUN test -x dependencies/IsaacLab/isaaclab.sh || \
+    (echo "dependencies/IsaacLab is not initialized. Run 'git submodule update --init --recursive' before 'docker build'." >&2; exit 1)
+
+RUN python -m pip install --no-deps \
+        setuptools==65 \
+        wheel==0.45.1 \
+        toml==0.10.2 \
+        packaging==23.0 \
+        poetry-core==2.2.1 \
+    && sed -i \
+        -e 's|-m pip install --editable |-m pip install --no-build-isolation --editable |g' \
+        -e 's|-m pip install -e |-m pip install --no-build-isolation -e |g' \
+        dependencies/IsaacLab/isaaclab.sh \
+    && cd dependencies/IsaacLab \
+    && ./isaaclab.sh --install
+
+RUN python -m pip install --no-deps numpy==1.26.0
+
+RUN python -m pip install --upgrade \
+        pip==26.0.1 \
+        setuptools==80.10.2 \
+        wheel==0.45.1 \
+    && printf "numpy==1.26.0\n" > /tmp/leisaac-constraints.txt \
+    && python -m pip install -c /tmp/leisaac-constraints.txt -e "source/leisaac[lerobot]" \
+    && python -m pip install --no-deps numpy==1.26.0 \
+    && rm -f /tmp/leisaac-constraints.txt
+
+CMD ["/bin/bash"]

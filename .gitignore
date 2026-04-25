@@ -18,9 +18,9 @@ data/*
 checkpoints/*
 !checkpoints/.gitkeep
 
-# Extension project outputs
-source/leisaac/**/output/
-source/leisaac/**/outputs/
-source/leisaac/**/videos/
-source/leisaac/**/wandb/
-umi/.cache/
+# Workspace member outputs
+packages/leisaac/**/output/
+packages/leisaac/**/outputs/
+packages/leisaac/**/videos/
+packages/leisaac/**/wandb/
+packages/umi/.cache/

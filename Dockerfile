@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_NO_CACHE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     VIRTUAL_ENV=/workspace/aicapstone/.venv \
-    PYTHONPATH=/workspace/aicapstone/umi/src:/workspace/aicapstone/source/leisaac
+    PYTHONPATH=/workspace/aicapstone/packages/umi/src:/workspace/aicapstone/packages/leisaac/source/leisaac
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get upgrade -y && \
@@ -42,15 +42,13 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
 
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 100
 
+COPY . /workspace/aicapstone
+
 RUN uv venv --python /usr/bin/python3.11 ${VIRTUAL_ENV} && \
     echo "source ${VIRTUAL_ENV}/bin/activate" >> /etc/bash.bashrc
 
-COPY pyproject.toml README.md /workspace/aicapstone/
-
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --python ${VIRTUAL_ENV}
-
-COPY . /workspace/aicapstone
 
 RUN ln -sf /usr/include/python3.11 /usr/include/python3
 

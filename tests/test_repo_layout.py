@@ -4,27 +4,37 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_expected_top_level_layout_exists() -> None:
-    for name in ["umi", "source", "scripts", "data", "checkpoints"]:
-        assert (ROOT / name).is_dir(), name
+def test_expected_root_scaffolding_exists() -> None:
+    for path in [
+        "packages/umi",
+        "packages/leisaac",
+        "scripts",
+        "data",
+        "checkpoints",
+        "Dockerfile",
+        "Makefile",
+        "README.md",
+        "pyproject.toml",
+    ]:
+        assert (ROOT / path).exists(), path
 
 
-def test_single_top_level_pyproject_is_present() -> None:
-    assert (ROOT / "pyproject.toml").is_file()
-    assert not (ROOT / "umi" / "pyproject.toml").exists()
-    assert not (ROOT / "source" / "leisaac" / "pyproject.toml").exists()
+def test_workspace_members_have_pyproject_files() -> None:
+    assert (ROOT / "packages" / "umi" / "pyproject.toml").is_file()
+    assert (ROOT / "packages" / "leisaac" / "pyproject.toml").is_file()
 
 
-def test_leisaac_is_dependency_with_local_extensions() -> None:
-    assert not (ROOT / "umi" / ".git").exists()
-    assert not (ROOT / "leisaac").exists()
-    assert (ROOT / "source" / "leisaac" / "leisaac" / "tasks" / "cup_stacking").is_dir()
-    assert (ROOT / "source" / "leisaac" / "leisaac" / "tasks" / "template" / "single_arm_franka_cfg.py").is_file()
-
-
-def test_top_level_pyproject_declares_leisaac_dependency() -> None:
+def test_root_pyproject_declares_uv_workspace() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text()
-    assert "leisaac @ git+https://github.com/author31/leisaac.git@feat/add-joint-position-action-space#subdirectory=source/leisaac" in pyproject
+    assert 'members = ["packages/*"]' in pyproject
+    assert 'umi = { workspace = true }' in pyproject
+    assert 'leisaac = { workspace = true }' in pyproject
+
+
+def test_workspace_members_are_flat_vendored_copies() -> None:
+    assert not (ROOT / "packages" / "umi" / ".git").exists()
+    assert not (ROOT / "packages" / "leisaac" / ".git").exists()
+    assert not (ROOT / "packages" / "leisaac" / ".gitmodules").exists()
 
 
 def test_runtime_directories_are_tracked() -> None:

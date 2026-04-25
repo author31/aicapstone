@@ -1,86 +1,32 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.8.13,<0.9.0"]
+build-backend = "uv_build"
 
 [project]
 name = "aicapstone"
 version = "0.1.0"
-description = "Single-repo MVP that vendors umi and layers local extensions on top of leisaac."
+description = "UV workspace root for the MVP repo." 
 readme = "README.md"
-requires-python = ">=3.10, <3.13"
+requires-python = ">=3.10, <3.12"
 dependencies = [
-    "accelerate==0.24",
-    "aiofiles==23.2",
-    "aiohttp==3.9",
-    "atomics==1.0.2",
-    "av>=15.0.0",
-    "boto3==1.33",
-    "click>=8.2.1",
-    "deepdiff",
-    "diffusers==0.18.2",
-    "docker>=6.0.0",
-    "dill==0.3.7",
-    "einops==0.6.1",
-    "fastcrc==0.2",
-    "feetech-servo-sdk",
-    "free-mujoco-py",
-    "gym",
-    "hydra-core==1.2.0",
-    "imagecodecs>=2023.9.18",
-    "ipykernel>=6.30.1",
-    "ipywidgets>=8.1.7",
-    "k3d==2.15.0",
-    "leisaac @ git+https://github.com/author31/leisaac.git@feat/add-joint-position-action-space#subdirectory=source/leisaac",
-    "lmdb==1.4",
-    "loguru>=0.7.3",
-    "matplotlib>=3.7",
-    "numba==0.57",
-    "numcodecs==0.11",
-    "numpy>=1.24,<2.0.0",
-    "opencv-contrib-python",
-    "pandas==2.1",
-    "psutil",
-    "PyExifTool==0.5",
-    "pygame>=2.5.1,<2.7.0",
-    "pynput==1.7.6",
-    "pyserial",
-    "pyyaml==6.0",
-    "ray[default]>=2.8.0",
-    "robomimic",
-    "scikit-fda==0.9",
-    "scikit-video",
-    "scipy==1.11",
-    "threadpoolctl==3.2",
-    "timm==0.9.7",
-    "torch==2.1.0",
-    "torchvision==0.16.0",
-    "tqdm==4.65",
-    "ur-rtde==1.5.6",
-    "viser>=1.0.8",
-    "voila>=0.5.10",
-    "v4l2py==2.2",
-    "wandb>=0.15.8",
-    "yourdfpy>=0.0.58",
-    "zarr>=2.16",
-    "py-gpmf-parser @ git+https://github.com/urbste/py-gpmf-parser.git",
-    "robosuite @ https://github.com/cheng-chi/robosuite/archive/3f2c3116f1c0a1916e94bfa28da4d055927d1ab3.tar.gz",
-    "spnav @ https://github.com/cheng-chi/spnav/archive/c1c938ebe3cc542db4685e0d13850ff1abfdb943.tar.gz",
+    "umi",
+    "leisaac",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "ipython[all]",
-    "notebook",
-    "plotly>=6.3.0",
     "pytest",
     "ruff>=0.12.11",
 ]
 
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+umi = { workspace = true }
+leisaac = { workspace = true }
+
 [tool.pytest.ini_options]
-pythonpath = [
-    "umi/src",
-    "source/leisaac",
-]
 testpaths = ["tests"]
 
 [tool.uv]

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel", "toml"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leisaac"
+version = "0.3.0"
+description = "leisaac: Lerobot & IsaacLab Integration"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Yinghao Shuai", email = "yinghao.shuai@lightwheel.ai" }
+]
+keywords = ["extension", "isaaclab", "leisaac", "lerobot"]
+classifiers = [
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.11",
+    "Isaac Sim :: 5.1.0",
+]
+requires-python = ">=3.10, <3.12"
+dependencies = [
+    "deepdiff",
+    "feetech-servo-sdk",
+    "psutil",
+    "pygame>=2.5.1,<2.7.0",
+    "pyserial",
+]
+
+[project.urls]
+Homepage = "https://github.com/LightwheelAI/leisaac"
+Repository = "https://github.com/LightwheelAI/leisaac"
+
+[tool.setuptools]
+include-package-data = true
+zip-safe = false
+
+[tool.setuptools.package-dir]
+"" = "source/leisaac"
+
+[tool.setuptools.packages.find]
+where = ["source/leisaac"]
+include = ["leisaac*"]
