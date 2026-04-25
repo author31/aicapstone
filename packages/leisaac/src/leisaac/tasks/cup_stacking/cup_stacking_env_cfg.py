@@ -14,8 +14,8 @@ from isaaclab.utils import configclass
 
 from leisaac.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
 from leisaac.utils.constant import ASSETS_ROOT
-from leisaac.utils.domain_randomization import domain_randomization, randomize_object_uniform
 from leisaac.utils.general_assets import parse_usd_and_create_subassets
+from leisaac.utils.object_poses_loader import ObjectPoseConfig, load_object_poses
 
 from ..template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,
@@ -25,6 +25,13 @@ from ..template.single_arm_franka_cfg import (
 )
 
 KITCHEN_OBJECTS_ROOT = Path(ASSETS_ROOT) / "scenes" / "kitchen" / "objects"
+
+TAG_TO_OBJECT: dict[int, str] = {1: "blue_cup", 2: "pink_cup"}
+ANCHOR_TAG_ID: int = 0
+ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.0, 0.0, 0.0)
+OBJECT_Z: float = 0.12
+OBJECT_ROLL: float = 0.0
+OBJECT_PITCH: float = 0.0
 
 
 @configclass
@@ -123,24 +130,17 @@ class CupStackingEnvCfg(SingleArmFrankaTaskEnvCfg):
 
         parse_usd_and_create_subassets(KITCHEN_USD_PATH, self)
 
-        domain_randomization(
-            self,
-            random_options=[
-                randomize_object_uniform(
-                    "blue_cup",
-                    pose_range={
-                        "x": (0.02, -0.02),
-                        "y": (0.0, 0.0),
-                        "z": (0.0, 0.0),
-                    },
-                ),
-                randomize_object_uniform(
-                    "pink_cup",
-                    pose_range={
-                        "x": (0.0, 0.00),
-                        "y": (0.0, 0.0),
-                        "z": (0.0, 0.0),
-                    },
-                ),
-            ],
-        )
+        if self.object_poses_path is not None:
+            pose_cfg = ObjectPoseConfig(
+                tag_to_object=TAG_TO_OBJECT,
+                anchor_tag_id=ANCHOR_TAG_ID,
+                anchor_world_pose=ANCHOR_WORLD_POSE,
+                object_z=OBJECT_Z,
+                object_roll=OBJECT_ROLL,
+                object_pitch=OBJECT_PITCH,
+            )
+            loaded_poses = load_object_poses(self.object_poses_path, pose_cfg)
+            for obj_name, (pos, rot) in loaded_poses.items():
+                obj_cfg = getattr(self.scene, obj_name)
+                obj_cfg.init_state.pos = pos
+                obj_cfg.init_state.rot = rot
