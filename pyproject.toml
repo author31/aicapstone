@@ -11,6 +11,7 @@ requires-python = ">=3.10, <3.12"
 dependencies = [
     "umi",
     "leisaac",
+    "leisaac-overlay",
 ]
 
 [project.optional-dependencies]
@@ -24,7 +25,8 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 umi = { workspace = true }
-leisaac = { workspace = true }
+leisaac-overlay = { workspace = true }
+leisaac = { git = "https://github.com/author31/leisaac.git", subdirectory = "source/leisaac", rev = "241779b8439593d4bec4df5e3182a97f205814b5" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
