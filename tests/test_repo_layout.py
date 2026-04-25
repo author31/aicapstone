@@ -18,6 +18,7 @@ def test_single_top_level_pyproject_is_present() -> None:
 def test_vendored_repos_are_flat_copies() -> None:
     assert not (ROOT / "umi" / ".git").exists()
     assert not (ROOT / "leisaac" / ".git").exists()
+    assert not (ROOT / "leisaac" / ".gitmodules").exists()
 
 
 def test_runtime_directories_are_tracked() -> None:
