@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+build/
+dist/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+
+# Runtime directories
+data/*
+!data/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+
+# Workspace member outputs
+packages/leisaac/**/output/
+packages/leisaac/**/outputs/
+packages/leisaac/**/videos/
+packages/leisaac/**/wandb/
+packages/umi/.cache/

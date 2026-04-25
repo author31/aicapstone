@@ -1,0 +1,146 @@
+# pyright: reportMissingImports=false, reportIncompatibleVariableOverride=false
+
+import math
+from pathlib import Path
+
+import isaaclab.sim as sim_utils
+import torch
+
+from isaaclab.assets import AssetBaseCfg, RigidObject, RigidObjectCfg
+from isaaclab.managers import SceneEntityCfg
+from isaaclab.managers import TerminationTermCfg as DoneTerm
+from isaaclab.sim.schemas import MassPropertiesCfg
+from isaaclab.utils import configclass
+
+from leisaac.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
+from leisaac.utils.constant import ASSETS_ROOT
+from leisaac.utils.domain_randomization import domain_randomization, randomize_object_uniform
+from leisaac.utils.general_assets import parse_usd_and_create_subassets
+
+from ..template.single_arm_franka_cfg import (
+    SingleArmFrankaObservationsCfg,
+    SingleArmFrankaTaskEnvCfg,
+    SingleArmFrankaTaskSceneCfg,
+    SingleArmFrankaTerminationsCfg,
+)
+
+KITCHEN_OBJECTS_ROOT = Path(ASSETS_ROOT) / "scenes" / "kitchen" / "objects"
+
+
+@configclass
+class CupStackingSceneCfg(SingleArmFrankaTaskSceneCfg):
+    """Scene configuration for the custom task."""
+
+    scene: AssetBaseCfg = KITCHEN_CFG.replace(prim_path="{ENV_REGEX_NS}/Scene")
+    blue_cup: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Scene/blue_cup",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(KITCHEN_OBJECTS_ROOT / "BlueCup" / "BlueCup.usd"),
+            mass_props=MassPropertiesCfg(mass=0.1),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.36, -0.4, 0.12), rot=(1.0, 0.0, 0.0, 0.0)),
+    )
+
+    pink_cup: RigidObjectCfg = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Scene/pink_cup",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=str(KITCHEN_OBJECTS_ROOT / "PinkCup" / "PinkCup.usd"),
+            mass_props=MassPropertiesCfg(mass=0.1),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.46, -0.4, 0.12), rot=(1.0, 0.0, 0.0, 0.0)),
+    )
+
+
+def blue_cup_on_top_pink_cup(
+    env,
+    blue_cup_cfg: SceneEntityCfg,
+    pink_cup_cfg: SceneEntityCfg,
+    x_range: tuple[float, float],
+    y_range: tuple[float, float],
+    height_threshold: float,
+) -> torch.Tensor:
+    """Termination condition for the cup stacking task."""
+    blue_cup: RigidObject = env.scene[blue_cup_cfg.name]
+    pink_cup: RigidObject = env.scene[pink_cup_cfg.name]
+
+    blue_cup_pos = blue_cup.data.root_pos_w - env.scene.env_origins
+    pink_cup_pos = pink_cup.data.root_pos_w - env.scene.env_origins
+
+    done = torch.ones(env.num_envs, dtype=torch.bool, device=env.device)
+    done = torch.logical_and(done, blue_cup_pos[:, 0] < pink_cup_pos[:, 0] + x_range[1])
+    done = torch.logical_and(done, blue_cup_pos[:, 0] > pink_cup_pos[:, 0] + x_range[0])
+    done = torch.logical_and(done, blue_cup_pos[:, 1] < pink_cup_pos[:, 1] + y_range[1])
+    done = torch.logical_and(done, blue_cup_pos[:, 1] > pink_cup_pos[:, 1] + y_range[0])
+    done = torch.logical_and(done, blue_cup_pos[:, 2] > pink_cup_pos[:, 2] + height_threshold)
+    return done
+
+
+@configclass
+class TerminationsCfg(SingleArmFrankaTerminationsCfg):
+    """Termination configuration for the custom task."""
+
+    success = DoneTerm(
+        func=blue_cup_on_top_pink_cup,
+        params={
+            "blue_cup_cfg": SceneEntityCfg("blue_cup"),
+            "pink_cup_cfg": SceneEntityCfg("pink_cup"),
+            "x_range": (-0.05, 0.05),
+            "y_range": (-0.05, 0.05),
+            "height_threshold": 0.10,
+        },
+    )
+
+
+@configclass
+class CupStackingEnvCfg(SingleArmFrankaTaskEnvCfg):
+    """Configuration for the custom task environment."""
+
+    scene: CupStackingSceneCfg = CupStackingSceneCfg(env_spacing=8.0)
+    observations: SingleArmFrankaObservationsCfg = SingleArmFrankaObservationsCfg()
+    terminations: TerminationsCfg = TerminationsCfg()
+    task_description: str = "pick up the blue cup and place it on the pink cup."
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+
+        self.viewer.eye = (0.8, 0.87, 0.67)
+        self.viewer.lookat = (0.4, -1.3, -0.2)
+        self.dynamic_reset_gripper_effort_limit = False
+
+        self.scene.robot.init_state.pos = (0.35, -0.74, 0.01)
+        self.scene.robot.init_state.rot = (0.707, 0.0, 0.0, 0.707)
+        self.scene.robot.init_state.joint_pos = {
+            "panda_joint1": 0.0,
+            "panda_joint2": -math.pi / 4.0,
+            "panda_joint3": 0.0,
+            "panda_joint4": -3.0 * math.pi / 4.0,
+            "panda_joint5": 0.0,
+            "panda_joint6": math.pi / 2.0,
+            "panda_joint7": math.pi / 4.0,
+            "panda_finger_joint1": 0.04,
+            "panda_finger_joint2": 0.04,
+        }
+
+        parse_usd_and_create_subassets(KITCHEN_USD_PATH, self)
+
+        domain_randomization(
+            self,
+            random_options=[
+                randomize_object_uniform(
+                    "blue_cup",
+                    pose_range={
+                        "x": (0.02, -0.02),
+                        "y": (0.0, 0.0),
+                        "z": (0.0, 0.0),
+                    },
+                ),
+                randomize_object_uniform(
+                    "pink_cup",
+                    pose_range={
+                        "x": (0.0, 0.00),
+                        "y": (0.0, 0.0),
+                        "z": (0.0, 0.0),
+                    },
+                ),
+            ],
+        )
