@@ -1,4 +1,7 @@
+# pyright: reportMissingImports=false
+
 import gymnasium as gym
+
 
 gym.register(
     id="LeIsaac-HCIS-CupStacking-SingleArm-v0",

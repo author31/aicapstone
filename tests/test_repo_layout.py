@@ -37,6 +37,16 @@ def test_workspace_members_are_flat_vendored_copies() -> None:
     assert not (ROOT / "packages" / "leisaac" / ".gitmodules").exists()
 
 
+def test_leisaac_member_is_extension_only() -> None:
+    assert (ROOT / "packages" / "leisaac" / "source" / "leisaac" / "leisaac" / "tasks" / "cup_stacking").is_dir()
+    assert (ROOT / "packages" / "leisaac" / "source" / "leisaac" / "leisaac" / "tasks" / "template" / "single_arm_franka_cfg.py").is_file()
+    assert not (ROOT / "packages" / "leisaac" / "docs").exists()
+    assert not (ROOT / "packages" / "leisaac" / "scripts").exists()
+    assert not (ROOT / "packages" / "leisaac" / "assets").exists()
+    assert not (ROOT / "packages" / "leisaac" / "Dockerfile").exists()
+    assert not (ROOT / "packages" / "leisaac" / "Makefile").exists()
+
+
 def test_runtime_directories_are_tracked() -> None:
     assert (ROOT / "data" / ".gitkeep").is_file()
     assert (ROOT / "checkpoints" / ".gitkeep").is_file()

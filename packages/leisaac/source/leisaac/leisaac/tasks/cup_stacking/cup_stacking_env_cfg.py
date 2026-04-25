@@ -1,3 +1,5 @@
+# pyright: reportMissingImports=false, reportIncompatibleVariableOverride=false
+
 import math
 from pathlib import Path
 
@@ -7,16 +9,15 @@ import torch
 from isaaclab.assets import AssetBaseCfg, RigidObject, RigidObjectCfg
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.managers import TerminationTermCfg as DoneTerm
-from isaaclab.utils import configclass
 from isaaclab.sim.schemas import MassPropertiesCfg
+from isaaclab.utils import configclass
 
-from leisaac.utils.constant import ASSETS_ROOT
 from leisaac.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
-from leisaac.utils.general_assets import parse_usd_and_create_subassets
+from leisaac.utils.constant import ASSETS_ROOT
 from leisaac.utils.domain_randomization import domain_randomization, randomize_object_uniform
+from leisaac.utils.general_assets import parse_usd_and_create_subassets
 
-
-from ..template import (
+from ..template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,
     SingleArmFrankaTaskEnvCfg,
     SingleArmFrankaTaskSceneCfg,
@@ -50,7 +51,6 @@ class CupStackingSceneCfg(SingleArmFrankaTaskSceneCfg):
     )
 
 
-
 def blue_cup_on_top_pink_cup(
     env,
     blue_cup_cfg: SceneEntityCfg,
@@ -78,6 +78,7 @@ def blue_cup_on_top_pink_cup(
 @configclass
 class TerminationsCfg(SingleArmFrankaTerminationsCfg):
     """Termination configuration for the custom task."""
+
     success = DoneTerm(
         func=blue_cup_on_top_pink_cup,
         params={
@@ -93,6 +94,7 @@ class TerminationsCfg(SingleArmFrankaTerminationsCfg):
 @configclass
 class CupStackingEnvCfg(SingleArmFrankaTaskEnvCfg):
     """Configuration for the custom task environment."""
+
     scene: CupStackingSceneCfg = CupStackingSceneCfg(env_spacing=8.0)
     observations: SingleArmFrankaObservationsCfg = SingleArmFrankaObservationsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
@@ -121,22 +123,21 @@ class CupStackingEnvCfg(SingleArmFrankaTaskEnvCfg):
 
         parse_usd_and_create_subassets(KITCHEN_USD_PATH, self)
 
-
         domain_randomization(
             self,
             random_options=[
                 randomize_object_uniform(
                     "blue_cup",
                     pose_range={
-                        "x": (0.02, -0.02), 
+                        "x": (0.02, -0.02),
                         "y": (0.0, 0.0),
                         "z": (0.0, 0.0),
                     },
                 ),
                 randomize_object_uniform(
-                    "pink_cup", 
+                    "pink_cup",
                     pose_range={
-                        "x": (0.0, 0.00), 
+                        "x": (0.0, 0.00),
                         "y": (0.0, 0.0),
                         "z": (0.0, 0.0),
                     },

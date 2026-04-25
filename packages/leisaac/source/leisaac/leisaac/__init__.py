@@ -1,12 +1,4 @@
-# Copyright (c) 2022-2025, The Isaac Lab Project Developers (https://github.com/isaac-sim/IsaacLab/blob/main/CONTRIBUTORS.md).
-# All rights reserved.
-#
-# SPDX-License-Identifier: BSD-3-Clause
+from pkgutil import extend_path
 
-"""
-Python module serving as a project/extension template.
-"""
 
-# Register Gym environments.
-from .tasks import *
-from .utils import monkey_patch
+__path__ = extend_path(__path__, __name__)
