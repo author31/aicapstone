@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "aicapstone"
 version = "0.1.0"
-description = "Single-repo MVP that vendors umi and leisaac into aicapstone."
+description = "Single-repo MVP that vendors umi and layers local extensions on top of leisaac."
 readme = "README.md"
 requires-python = ">=3.10, <3.13"
 dependencies = [
@@ -30,6 +30,7 @@ dependencies = [
     "ipykernel>=6.30.1",
     "ipywidgets>=8.1.7",
     "k3d==2.15.0",
+    "leisaac @ git+https://github.com/author31/leisaac.git@feat/add-joint-position-action-space#subdirectory=source/leisaac",
     "lmdb==1.4",
     "loguru>=0.7.3",
     "matplotlib>=3.7",
@@ -78,7 +79,7 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = [
     "umi/src",
-    "leisaac/source/leisaac",
+    "source/leisaac",
 ]
 testpaths = ["tests"]
 

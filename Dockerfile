@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     UV_NO_CACHE=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
     VIRTUAL_ENV=/workspace/aicapstone/.venv \
-    PYTHONPATH=/workspace/aicapstone/umi/src:/workspace/aicapstone/leisaac/source/leisaac
+    PYTHONPATH=/workspace/aicapstone/umi/src:/workspace/aicapstone/source/leisaac
 
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     apt-get update && apt-get upgrade -y && \

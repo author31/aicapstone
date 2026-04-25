@@ -18,9 +18,9 @@ data/*
 checkpoints/*
 !checkpoints/.gitkeep
 
-# Vendored project outputs
-leisaac/**/output/
-leisaac/**/outputs/
-leisaac/**/videos/
-leisaac/**/wandb/
+# Extension project outputs
+source/leisaac/**/output/
+source/leisaac/**/outputs/
+source/leisaac/**/videos/
+source/leisaac/**/wandb/
 umi/.cache/
