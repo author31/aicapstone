@@ -42,7 +42,6 @@ Real-world data collection. SLAM reconstruction pipeline over recorded session.
 uv run umi run-slam-pipeline <pipeline-config> --session-dir <session> --task <task>
 ```
 
-Pipeline configs in `umi_pipeline_configs/`. See `CONFIG_PROPAGATION_GUIDE.md` for inheritance rules.
 
 ### Isaac Lab / Isaac Sim
 
