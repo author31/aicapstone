@@ -107,17 +107,17 @@ RUN python -m pip install --no-deps \
 RUN python -m pip install --no-deps numpy==1.26.0
 
 RUN python -m pip install --upgrade \
-        pip==26.0.1 \
         setuptools==80.10.2 \
-        wheel==0.45.1 \
-    && python -m pip install --no-deps numpy==1.26.0
+        wheel==0.45.1
 
-COPY packages/simulator /workspace/aicapstone/packages/simulator
-
-RUN printf "numpy==1.26.0\n" > /tmp/simulator-constraints.txt \
-    && python -m pip install -c /tmp/simulator-constraints.txt --no-deps -e packages/simulator \
-    && python -m pip install -c /tmp/simulator-constraints.txt lerobot==0.4.4 \
+RUN printf "numpy==1.26.0\n" > /tmp/lerobot-constraints.txt \
+    && python -m pip install --use-deprecated=legacy-resolver \
+        -c /tmp/lerobot-constraints.txt \
+        lerobot==0.4.2 \
     && python -m pip install --no-deps numpy==1.26.0 \
-    && rm -f /tmp/simulator-constraints.txt
+    && rm -f /tmp/lerobot-constraints.txt
+
+RUN python -m pip install --upgrade pip==26.0.1 \
+    && python -m pip install --no-deps numpy==1.26.0
 
 CMD ["/bin/bash"]

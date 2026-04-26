@@ -97,3 +97,7 @@ Dataset transfer and training run on the **host machine** (training inside the c
 ## Rollout (run inside the container)
 
 Run trained policy in sim. Entry: `scripts/evaluation/policy_inference_sync.py`. Flags: `--task`, `--policy_type`, `--policy_checkpoint_path`, `--policy_action_horizon`, `--device`, `--enable_cameras`.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
