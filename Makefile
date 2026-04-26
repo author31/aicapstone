@@ -26,8 +26,7 @@ launch-isaaclab: build-isaaclab
 	trap 'xhost -local:root >/dev/null' EXIT; \
 	docker run --rm -it \
 		--name isaaclab \
-		--runtime=nvidia \
-		--gpus all \
+		--device nvidia.com/gpu=all \
 		--net=host \
 		--ipc=host \
 		-v $(shell pwd):/workspace/aicapstone \
@@ -74,7 +73,7 @@ launch-isaaclab: build-isaaclab
 
 check-isaaclab-gpu:
 	@docker run --rm \
-		--gpus all \
+		--device nvidia.com/gpu=all \
 		-e ACCEPT_EULA=Y \
 		-e NVIDIA_VISIBLE_DEVICES=all \
 		-e NVIDIA_DRIVER_CAPABILITIES=all \

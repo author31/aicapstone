@@ -1,73 +1,123 @@
 # syntax = docker/dockerfile:1.7
-ARG CUDA_VERSION=12.2.0
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS uv-base
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
 
-COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /usr/bin/
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTHON_VERSION=3.11
 
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
-
-COPY --from=uv-base /usr/bin/uv /usr/bin/uv
-COPY --from=uv-base /usr/bin/uvx /usr/bin/uvx
-
-WORKDIR /workspace/aicapstone
-
-ENV DEBIAN_FRONTEND=noninteractive \
-    LANG=en_US.UTF-8 \
-    LC_ALL=en_US.UTF-8 \
-    UV_LINK_MODE=copy \
-    UV_PYTHON_DOWNLOADS=never \
-    UV_NO_CACHE=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    VIRTUAL_ENV=/workspace/aicapstone/.venv \
+ENV NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=all \
+    PIP_NO_CACHE_DIR=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
     ACCEPT_EULA=Y \
     OMNI_KIT_ACCEPT_EULA=YES \
     PRIVACY_CONSENT=Y \
-    PYTHONPATH=/workspace/aicapstone/packages/umi/src:/workspace/aicapstone/packages/simulator/src \
     TERM=xterm-256color
 
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    apt-get update && apt-get upgrade -y && \
-    apt-get install -y --no-install-recommends \
-        git cmake build-essential curl wget gnupg2 lsb-release \
-        software-properties-common locales pkg-config ca-certificates \
-        python3.11 python3.11-dev python3.11-distutils \
-        libboost-all-dev libqhull-dev libassimp-dev liboctomap-dev \
-        libconsole-bridge-dev libfcl-dev libeigen3-dev \
-        libx11-dev libxaw7-dev libxrandr-dev libgl1-mesa-dev libglu1-mesa-dev \
-        libglew-dev libgles2-mesa-dev libopengl-dev libfreetype-dev \
-        qtbase5-dev qtchooser qt5-qmake qtbase5-dev-tools \
-        libyaml-cpp-dev libzzip-dev freeglut3-dev libogre-1.9-dev \
-        libpng-dev libjpeg-dev python3-pyqt5.qtwebengine \
-        libbullet-dev libasio-dev libtinyxml2-dev \
-        libcunit1-dev libacl1-dev libfmt-dev \
-    && locale-gen en_US en_US.UTF-8 \
-    && update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8 \
-    && apt-get clean && rm -rf /var/lib/apt/lists/*
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 100
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        ca-certificates \
+        cmake \
+        curl \
+        git \
+        libasound2 \
+        libdbus-1-3 \
+        libegl1 \
+        libfontconfig1 \
+        libgl1 \
+        libglu1-mesa \
+        libglib2.0-0 \
+        libgtk-3-0 \
+        libice6 \
+        libnss3 \
+        libsm6 \
+        libvulkan1 \
+        libx11-6 \
+        libx11-xcb1 \
+        libxcb-cursor0 \
+        libxcb-icccm4 \
+        libxcb-image0 \
+        libxcb-keysyms1 \
+        libxcb-render-util0 \
+        libxcb-xinerama0 \
+        libxcb-xkb1 \
+        libxcursor1 \
+        libxext6 \
+        libxi6 \
+        libxinerama1 \
+        libxkbcommon-x11-0 \
+        libxrandr2 \
+        libxrender1 \
+        libxt6 \
+        libxtst6 \
+        libxxf86vm1 \
+        python${PYTHON_VERSION} \
+        python${PYTHON_VERSION}-dev \
+        python${PYTHON_VERSION}-distutils \
+        python${PYTHON_VERSION}-venv \
+        unzip \
+        vulkan-tools \
+        wget \
+    && ln -sf /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python \
+    && ln -sf /usr/bin/python${PYTHON_VERSION} /usr/local/bin/python3 \
+    && curl -fsSL https://bootstrap.pypa.io/get-pip.py -o /tmp/get-pip.py \
+    && python /tmp/get-pip.py \
+    && rm -f /tmp/get-pip.py \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN uv venv --python /usr/bin/python3.11 ${VIRTUAL_ENV} && \
-    echo "source ${VIRTUAL_ENV}/bin/activate" >> /etc/bash.bashrc
+WORKDIR /workspace/aicapstone
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install --python ${VIRTUAL_ENV} \
-        'isaacsim[all,extscache]==5.1.0' \
-        --extra-index-url https://pypi.nvidia.com
+RUN python -m pip install --upgrade pip \
+    && python -m pip install -U \
+        torch==2.7.0 \
+        torchvision==0.22.0 \
+        --index-url https://download.pytorch.org/whl/cu128 \
+    && python -m pip install --upgrade \
+        "isaacsim[all,extscache]==5.1.0" \
+        --extra-index-url https://pypi.nvidia.com \
+    && python -m pip install \
+        pip==23 \
+        setuptools==65 \
+        flatdict==4.0.0 \
+        huggingface-hub==0.35.3 \
+        transformers==4.57.6
 
 COPY dependencies/IsaacLab /workspace/aicapstone/dependencies/IsaacLab
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    cd /workspace/aicapstone/dependencies/IsaacLab && \
-    ./isaaclab.sh --install
+RUN test -x dependencies/IsaacLab/isaaclab.sh || \
+    (echo "dependencies/IsaacLab is not initialized. Run 'git submodule update --init --recursive' before 'docker build'." >&2; exit 1)
 
-COPY . /workspace/aicapstone
+RUN python -m pip install --no-deps \
+        setuptools==65 \
+        wheel==0.45.1 \
+        toml==0.10.2 \
+        packaging==23.0 \
+        poetry-core==2.2.1 \
+    && sed -i 's|-m pip install"|-m pip install --no-build-isolation"|' \
+        dependencies/IsaacLab/isaaclab.sh \
+    && cd dependencies/IsaacLab \
+    && ./isaaclab.sh --install
 
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --python ${VIRTUAL_ENV} --inexact
+RUN python -m pip install --no-deps numpy==1.26.0
 
-RUN ln -sf /usr/include/python3.11 /usr/include/python3
+RUN python -m pip install --upgrade \
+        pip==26.0.1 \
+        setuptools==80.10.2 \
+        wheel==0.45.1 \
+    && python -m pip install --no-deps numpy==1.26.0
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY packages/simulator /workspace/aicapstone/packages/simulator
 
-ENTRYPOINT ["/entrypoint.sh"]
+RUN printf "numpy==1.26.0\n" > /tmp/simulator-constraints.txt \
+    && python -m pip install -c /tmp/simulator-constraints.txt --no-deps -e packages/simulator \
+    && python -m pip install -c /tmp/simulator-constraints.txt lerobot==0.4.4 \
+    && python -m pip install --no-deps numpy==1.26.0 \
+    && rm -f /tmp/simulator-constraints.txt
+
+CMD ["/bin/bash"]

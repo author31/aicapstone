@@ -1,22 +1,99 @@
-# aicapstone MVP
+# AI Capstone
 
-This repository is the single home for the MVP.
+## Introduction
 
-## Layout
+Monorepo for AI Capstone. Two workflows under one uv workspace:
 
-- `packages/umi/`: flat-vendored from `voilab/packages/umi`
-- `packages/simulator/`: AICapstone simulator config layer on top of upstream `leisaac`, using `src/simulator/`
-- `scripts/`: vendored root-level workflow scripts from `voilab/scripts`
-- `data/`: runtime dataset directory tracked with `.gitkeep`
-- `checkpoints/`: runtime model directory tracked with `.gitkeep`
-- `Makefile`, `Dockerfile`, and `pyproject.toml`: root workspace scaffolding
+- **UMI** — real-world data collection.
+- **Isaac Lab / Isaac Sim** — robot motion generation, synthetic data creation, policy training/rollout via LeRobot.
 
-## Workspace Root
-
-The repository root is the uv workspace root. Install the workspace from the repo root:
+Repo root is uv workspace root. Install:
 
 ```bash
 uv sync
 ```
 
-The root `pyproject.toml` wires `umi` and `simulator` through `[tool.uv.workspace]` and `[tool.uv.sources]`, while each workspace member keeps its own `pyproject.toml` under `packages/`. The `simulator` workspace member is intentionally limited to the simulator config extensions being developed in this repo and lives under `packages/simulator/src/simulator`. It depends on the upstream `leisaac` package as a runtime dependency.
+### Where to run what
+
+| Stage | Environment | Why |
+|-------|-------------|-----|
+| Data creation (teleop, FSM datagen, UMI SLAM) | **Docker container** | Isaac Sim / Isaac Lab / Vulkan stack pinned in image |
+| Rollout (policy inference in sim) | **Docker container** | Same Isaac Sim runtime as datagen |
+| Training (`lerobot-train`, `accelerate launch`) | **Host machine** | Container adds I/O + GPU passthrough overhead — train natively for throughput |
+
+Use `make launch-isaaclab` for container work. Run training directly against the host `uv` env (`uv sync` then `lerobot-train ...`).
+
+### Layout
+
+- `packages/umi/` — UMI package
+- `packages/simulator/` — simulator config layer over upstream `leisaac`
+- `scripts/` — teleoperation, datagen, evaluation scripts
+- `umi_pipeline_configs/` — UMI SLAM pipeline configs
+- `dependencies/` — vendored submodules (Isaac Lab, etc.)
+- `data/`, `datasets/`, `checkpoints/` — runtime artifacts
+
+## Available Packages
+
+### UMI (Universal Manipulation Interface)
+
+Real-world data collection. SLAM reconstruction pipeline over recorded session.
+
+```bash
+uv run umi run-slam-pipeline <pipeline-config> --session-dir <session> --task <task>
+```
+
+Pipeline configs in `umi_pipeline_configs/`. See `CONFIG_PROPAGATION_GUIDE.md` for inheritance rules.
+
+### Isaac Lab / Isaac Sim
+
+Robot motion generation, synthetic data creation. Wraps upstream `leisaac` with project task configs in `packages/simulator/`.
+
+New to the task config layout? See [Isaac Lab + LeIsaac configuration tutorial](docs/isaaclab_leisaac_tutorial.md) — walks through the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and a recipe for adding a new task.
+
+#### Docker installation
+
+CUDA 12.8 / Ubuntu 22.04 image. Installs Isaac Sim 5.1.0, Isaac Lab (submodule), `simulator` package, LeRobot.
+
+Driven by `Makefile`. Image tag set via `IMAGE` (default `leisaac-isaaclab:latest`), Dockerfile via `DOCKERFILE`.
+
+| Target | Purpose |
+|--------|---------|
+| `make submodules` | Init/update git submodules (`dependencies/IsaacLab`, etc.) |
+| `make submodules-pull` | Pull latest submodule revisions |
+| `make install` | `submodules` + `uv sync` (host workspace install) |
+| `make install-dev` | `submodules` + `uv sync --extra dev` |
+| `make build-isaaclab` | Init submodules, build Docker image |
+| `make launch-isaaclab` | Build, launch container with GPU + X11 + workspace bind-mount, NVIDIA Vulkan ICD probe |
+| `make check-isaaclab-gpu` | Verify NVIDIA Vulkan ICD, `nvidia-smi`, GLU/Xt libs, torch CUDA visibility inside image |
+| `make test` | Run repo layout tests |
+
+Typical first-run flow:
+
+```bash
+make submodules
+make build-isaaclab
+make launch-isaaclab
+```
+
+Isaac Lab submodule must be initialized before build — `Dockerfile` fails fast otherwise.
+
+#### Usage (run inside the container)
+
+1. **Define task.** Task configs in `packages/simulator/`.
+2. **Keyboard teleoperation.** Run `scripts/environments/teleoperation/teleop_se3_agent.py` with task ID, device, num envs.
+3. **FSM planner datagen.** Run `scripts/datagen/state_machine/generate.py` with task, num demos, recorder flags, target dataset repo ID.
+
+#### LeRobot & Hugging Face Hub workflow
+
+Dataset transfer and training run on the **host machine** (training inside the container is significantly slower). Upload generated demos out of the container, then train on the host:
+
+1. **Upload generated dataset.** From inside the container after datagen: `hf upload <dataset-repo> <local-dataset-dir> --repo-type dataset --revision <tag>`.
+2. **Download dataset on host.** `hf download <dataset-repo> --repo-type dataset --local-dir <dir> --revision <rev>`.
+3. **Train (single GPU, host).** `lerobot-train` with `--policy.type`, `--dataset.repo_id`, `--output_dir`, `--policy.device`, etc.
+4. **Train (multi-GPU, host).** `accelerate launch --multi_gpu --num_processes=N $(which lerobot-train) <args>`.
+5. **Upload checkpoints.** `hf upload <model-repo> <local-ckpt-dir> --revision <tag>`.
+6. **Download checkpoints (back into the container for rollout).** `hf download <model-repo> --local-dir <dir> --revision <tag>`.
+
+## Rollout (run inside the container)
+
+Run trained policy in sim. Entry: `scripts/evaluation/policy_inference_sync.py`. Flags: `--task`, `--policy_type`, `--policy_checkpoint_path`, `--policy_action_horizon`, `--device`, `--enable_cameras`.
