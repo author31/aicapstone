@@ -19,8 +19,18 @@ checkpoints/*
 !checkpoints/.gitkeep
 
 # Workspace member outputs
-packages/leisaac/**/output/
-packages/leisaac/**/outputs/
-packages/leisaac/**/videos/
-packages/leisaac/**/wandb/
+packages/simulator/**/output/
+packages/simulator/**/outputs/
+packages/simulator/**/videos/
+packages/simulator/**/wandb/
 packages/umi/.cache/
+
+# IsaacLab submodule build artifacts
+dependencies/IsaacLab/logs/
+dependencies/IsaacLab/outputs/
+dependencies/IsaacLab/_isaac_sim
+dependencies/IsaacLab/**/__pycache__/
+dependencies/IsaacLab/**/*.egg-info/
+
+
+datasets/*

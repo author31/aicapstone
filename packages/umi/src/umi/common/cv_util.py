@@ -157,10 +157,12 @@ def detect_localize_aruco_tags(
     param = cv2.aruco.DetectorParameters()
     if refine_subpix:
         param.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
-    corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(image=img, dictionary=aruco_dict, parameters=param)
-    if len(corners) == 0:
+    detector = cv2.aruco.ArucoDetector(aruco_dict, param)
+    corners, ids, rejectedImgPoints = detector.detectMarkers(img)
+    if ids is None or len(corners) == 0:
         return dict()
 
+    zero_dist = np.zeros((1, 5))
     tag_dict = dict()
     for this_id, this_corners in zip(ids, corners):
         this_id = int(this_id[0])
@@ -169,7 +171,20 @@ def detect_localize_aruco_tags(
 
         marker_size_m = marker_size_map[this_id]
         undistorted = cv2.fisheye.undistortPoints(this_corners, K, D, P=K)
-        rvec, tvec, markerPoints = cv2.aruco.estimatePoseSingleMarkers(undistorted, marker_size_m, K, np.zeros((1, 5)))
+        half = marker_size_m / 2.0
+        obj_pts = np.array(
+            [
+                [-half, half, 0.0],
+                [half, half, 0.0],
+                [half, -half, 0.0],
+                [-half, -half, 0.0],
+            ],
+            dtype=np.float64,
+        )
+        img_pts = undistorted.reshape(-1, 2).astype(np.float64)
+        ok, rvec, tvec = cv2.solvePnP(obj_pts, img_pts, K, zero_dist, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+        if not ok:
+            continue
         tag_dict[this_id] = {
             "rvec": rvec.squeeze(),
             "tvec": tvec.squeeze(),

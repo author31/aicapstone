@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CFG_PATH = ROOT / "packages" / "leisaac" / "src" / "leisaac" / "tasks" / "template" / "single_arm_franka_cfg.py"
+CFG_PATH = ROOT / "packages" / "simulator" / "src" / "simulator" / "tasks" / "template" / "single_arm_franka_cfg.py"
 
 
 def test_single_arm_franka_base_env_cfg_declares_object_poses_path() -> None:

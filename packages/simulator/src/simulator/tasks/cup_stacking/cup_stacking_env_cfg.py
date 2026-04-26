@@ -1,5 +1,3 @@
-# pyright: reportMissingImports=false, reportIncompatibleVariableOverride=false
-
 import math
 from pathlib import Path
 
@@ -13,18 +11,18 @@ from isaaclab.sim.schemas import MassPropertiesCfg
 from isaaclab.utils import configclass
 
 from leisaac.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
-from leisaac.utils.constant import ASSETS_ROOT
 from leisaac.utils.general_assets import parse_usd_and_create_subassets
-from leisaac.utils.object_poses_loader import ObjectPoseConfig, load_object_poses
+from simulator import ASSET_ROOT
+from simulator.utils.object_poses_loader import ObjectPoseConfig, load_object_poses
 
-from ..template.single_arm_franka_cfg import (
+from simulator.tasks.template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,
     SingleArmFrankaTaskEnvCfg,
     SingleArmFrankaTaskSceneCfg,
     SingleArmFrankaTerminationsCfg,
 )
 
-KITCHEN_OBJECTS_ROOT = Path(ASSETS_ROOT) / "scenes" / "kitchen" / "objects"
+KITCHEN_OBJECTS_ROOT = ASSET_ROOT / "scenes" / "kitchen" / "objects"
 
 TAG_TO_OBJECT: dict[int, str] = {1: "blue_cup", 2: "pink_cup"}
 ANCHOR_TAG_ID: int = 0

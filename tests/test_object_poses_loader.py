@@ -5,7 +5,7 @@ import tempfile
 
 import pytest
 
-from leisaac.utils.object_poses_loader import (
+from simulator.utils.object_poses_loader import (
     ObjectPoseConfig,
     ObjectPosesError,
     load_object_poses,
