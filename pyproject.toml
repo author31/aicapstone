@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10, <3.12"
 dependencies = [
     "umi",
-    "leisaac",
+    "simulator",
 ]
 
 [project.optional-dependencies]
@@ -24,7 +24,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 umi = { workspace = true }
-leisaac = { workspace = true }
+simulator = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -153,7 +153,7 @@ class PipelineExecutor:
             cls = getattr(module, class_name)
             return cls
         except (ValueError, ImportError, AttributeError) as e:
-            raise ImportError(f"Cannot import class {class_path}: {e}")
+            raise ImportError(f"Cannot import class {class_path}: {e}") from e
 
     def load_service(self, stage_name: str, propagated_config: Dict[str, Any] = None) -> BaseService:
         """Load and instantiate a service for a given stage.
