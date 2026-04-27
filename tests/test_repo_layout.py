@@ -26,9 +26,8 @@ def test_workspace_members_have_pyproject_files() -> None:
 
 def test_root_pyproject_declares_uv_workspace() -> None:
     pyproject = (ROOT / "pyproject.toml").read_text()
-    assert 'members = ["packages/*"]' in pyproject
+    assert 'members = ["packages/umi"]' in pyproject
     assert 'umi = { workspace = true }' in pyproject
-    assert 'simulator = { workspace = true }' in pyproject
 
 
 def test_workspace_members_are_flat_vendored_copies() -> None:

@@ -1,6 +1,6 @@
 [build-system]
-requires = ["uv_build>=0.8.13,<0.9.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "simulator"
@@ -8,11 +8,13 @@ version = "0.3.0"
 description = "AICapstone simulator config layer on top of upstream leisaac."
 readme = "README.md"
 requires-python = ">=3.11"
-
 dependencies = [
-    "leisaac",
-    "lerobot == 0.4.4"
+    "leisaac @ git+https://github.com/LightwheelAI/leisaac.git#subdirectory=source/leisaac",
+    "lerobot==0.4.2",
 ]
 
-[tool.uv.sources]
-leisaac = { git = "https://github.com/LightwheelAI/leisaac.git", subdirectory = "source/leisaac" }
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

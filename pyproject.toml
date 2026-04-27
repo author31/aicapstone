@@ -11,7 +11,6 @@ license = { file = "LICENSE" }
 requires-python = ">=3.10, <3.12"
 dependencies = [
     "umi",
-    "simulator",
 ]
 
 [project.optional-dependencies]
@@ -21,11 +20,10 @@ dev = [
 ]
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/umi"]
 
 [tool.uv.sources]
 umi = { workspace = true }
-simulator = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

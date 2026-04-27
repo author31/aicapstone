@@ -1,5 +1,3 @@
-# pyright: reportMissingImports=false, reportIncompatibleVariableOverride=false, reportAssignmentType=false, reportUnknownVariableType=false, reportUnknownMemberType=false, reportUnknownArgumentType=false, reportUnknownParameterType=false
-
 from dataclasses import MISSING
 from typing import Any
 
@@ -18,12 +16,13 @@ from isaaclab.sensors import FrameTransformerCfg, OffsetCfg, TiledCameraCfg
 from isaaclab.utils import configclass
 from isaaclab.utils.datasets.episode_data import EpisodeData
 
-from leisaac.assets.robots.franka import FRANKA_PANDA_CFG
 from leisaac.devices.action_process import preprocess_device_action as preprocess_device_action_common
 from leisaac.enhance.datasets.lerobot_dataset_handler import LeRobotDatasetCfg
-from leisaac.utils.constant import FRANKA_JOINT_NAMES
 
-from . import mdp  # type: ignore
+from simulator.assets.robots.franka import FRANKA_PANDA_CFG
+from simulator import FRANKA_JOINT_NAMES
+
+from . import mdp
 
 
 def euler_deg_to_quat(x, y, z):
