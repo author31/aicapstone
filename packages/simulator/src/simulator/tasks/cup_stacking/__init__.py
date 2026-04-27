@@ -1,5 +1,3 @@
-# pyright: reportMissingImports=false
-
 import gymnasium as gym
 
 

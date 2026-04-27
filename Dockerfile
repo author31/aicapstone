@@ -89,6 +89,7 @@ RUN python -m pip install --upgrade pip \
         transformers==4.57.6
 
 COPY dependencies/IsaacLab /workspace/aicapstone/dependencies/IsaacLab
+COPY packages/simulator /workspace/aicapstone/packages/simulator
 
 RUN test -x dependencies/IsaacLab/isaaclab.sh || \
     (echo "dependencies/IsaacLab is not initialized. Run 'git submodule update --init --recursive' before 'docker build'." >&2; exit 1)
@@ -107,17 +108,21 @@ RUN python -m pip install --no-deps \
 RUN python -m pip install --no-deps numpy==1.26.0
 
 RUN python -m pip install --upgrade \
-        pip==26.0.1 \
         setuptools==80.10.2 \
         wheel==0.45.1 \
-    && python -m pip install --no-deps numpy==1.26.0
+        cython==3.0.11 \
+        toml==0.10.2 \
+        packaging==24.2
 
-COPY packages/simulator /workspace/aicapstone/packages/simulator
-
-RUN printf "numpy==1.26.0\n" > /tmp/simulator-constraints.txt \
-    && python -m pip install -c /tmp/simulator-constraints.txt --no-deps -e packages/simulator \
-    && python -m pip install -c /tmp/simulator-constraints.txt lerobot==0.4.4 \
+RUN printf "numpy==1.26.0\n" > /tmp/sim-constraints.txt \
+    && python -m pip install --use-deprecated=legacy-resolver \
+        --no-build-isolation \
+        -c /tmp/sim-constraints.txt \
+        packages/simulator \
     && python -m pip install --no-deps numpy==1.26.0 \
-    && rm -f /tmp/simulator-constraints.txt
+    && rm -f /tmp/sim-constraints.txt
+
+RUN python -m pip install --upgrade pip==26.0.1 \
+    && python -m pip install --no-deps numpy==1.26.0
 
 CMD ["/bin/bash"]
