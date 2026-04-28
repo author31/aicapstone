@@ -118,7 +118,7 @@ RUN printf "numpy==1.26.0\n" > /tmp/sim-constraints.txt \
     && python -m pip install --use-deprecated=legacy-resolver \
         --no-build-isolation \
         -c /tmp/sim-constraints.txt \
-        packages/simulator \
+        -e packages/simulator \
     && python -m pip install --no-deps numpy==1.26.0 \
     && rm -f /tmp/sim-constraints.txt
 

@@ -3,12 +3,16 @@ References: https://github.com/LightwheelAI/leisaac
 Unified data generation script using state machines.
 
 Selects the appropriate state machine based on --task and runs the recording loop.
+Episode count is driven by --object_poses: each ``status == "full"`` entry in the
+file yields one replayed episode. Object placements are written via
+``RigidObject.write_root_pose_to_sim`` after each ``env.reset()``.
 
 Usage:
-    python scripts/datagen/state_machine/generate.py \
-        --task LeIsaac-SO101-PickOrange-v0 \
+    python scripts/datagen/generate.py \
+        --task LeIsaac-HCIS-CupStacking-SingleArm-v0 \
         --num_envs 1 --device cuda --enable_cameras \
-        --record --dataset_file ./datasets/pick_orange.hdf5 --num_demos 50
+        --record --dataset_file ./datasets/cup_stacking.hdf5 \
+        --object_poses datasets/0210_kitchen/demos/mapping/object_poses.json
 """
 
 import multiprocessing
@@ -34,7 +38,10 @@ parser.add_argument(
 )
 parser.add_argument("--resume", action="store_true", help="Whether to resume recording in the existing dataset file.")
 parser.add_argument(
-    "--num_demos", type=int, default=1, help="Number of demonstrations to record. Set to 0 for infinite."
+    "--object_poses",
+    type=str,
+    required=True,
+    help="Path to the per-episode object_poses.json (UMI schema). Episode count = number of status=='full' entries.",
 )
 parser.add_argument("--quality", action="store_true", help="Whether to enable quality render mode.")
 parser.add_argument("--use_lerobot_recorder", action="store_true", help="Whether to use lerobot recorder.")
@@ -60,6 +67,7 @@ from leisaac.enhance.managers import EnhanceDatasetExportMode, StreamingRecorder
 from leisaac.utils.env_utils import dynamic_reset_gripper_effort_limit_sim
 
 from simulator.datagen.state_machine.cup_stacking import CupStackingStateMachine
+from simulator.utils.object_poses_loader import load_episode_poses
 
 # Maps gym task id → (StateMachineClass, device_type)
 TASK_REGISTRY = {
@@ -171,8 +179,35 @@ def _replace_recorder_manager(env, env_cfg, args_cli):
         env.recorder_manager.compression = "lzf"
 
 
-def _on_episode_done(env, sm, args_cli, resume_recorded_demo_count, current_recorded_demo_count, start_record_state):
-    """Handle end-of-episode logic. Returns (current_recorded_demo_count, start_record_state, should_break)."""
+def _apply_episode_poses(env, poses):
+    """Write per-object root poses for the current episode into the sim."""
+    device = env.device
+    for name, (pos, quat) in poses.items():
+        obj = env.scene[name]
+        pose_tensor = torch.tensor(
+            [[pos[0], pos[1], pos[2], quat[0], quat[1], quat[2], quat[3]]],
+            device=device,
+            dtype=torch.float32,
+        ).repeat(env.num_envs, 1)
+        obj.write_root_pose_to_sim(pose_tensor)
+
+
+def _on_episode_done(
+    env,
+    sm,
+    args_cli,
+    episodes,
+    next_episode_idx,
+    resume_recorded_demo_count,
+    current_recorded_demo_count,
+    start_record_state,
+):
+    """Handle end-of-episode logic.
+
+    Returns (next_episode_idx, current_recorded_demo_count, start_record_state, should_break).
+    """
+    total_episodes = len(episodes)
+
     try:
         success = sm.check_success(env)
     except Exception as e:
@@ -202,23 +237,17 @@ def _on_episode_done(env, sm, args_cli, resume_recorded_demo_count, current_reco
         )
         print(f"Recorded {current_recorded_demo_count} successful demonstrations.")
 
-    if (
-        args_cli.record
-        and args_cli.num_demos > 0
-        and env.recorder_manager.exported_successful_episode_count + resume_recorded_demo_count >= args_cli.num_demos
-    ):
-        print(f"All {args_cli.num_demos} demonstrations recorded. Exiting the app.")
-        return current_recorded_demo_count, start_record_state, True
+    if next_episode_idx >= total_episodes:
+        print(f"Replayed all {total_episodes} episodes. Exiting the app.")
+        return next_episode_idx, current_recorded_demo_count, start_record_state, True
 
     env.reset()
     sm.reset()
     auto_terminate(env, False)
+    _apply_episode_poses(env, episodes[next_episode_idx])
+    next_episode_idx += 1
 
-    if args_cli.record and args_cli.num_demos > 0 and current_recorded_demo_count >= args_cli.num_demos:
-        print(f"All {args_cli.num_demos} demonstrations recorded. Exiting the app.")
-        return current_recorded_demo_count, start_record_state, True
-
-    return current_recorded_demo_count, start_record_state, False
+    return next_episode_idx, current_recorded_demo_count, start_record_state, False
 
 
 def main():
@@ -238,6 +267,18 @@ def main():
     env_cfg = parse_env_cfg(task_name, device=args_cli.device, num_envs=args_cli.num_envs)
     env_cfg.use_teleop_device(device)
     env_cfg.seed = args_cli.seed if args_cli.seed is not None else int(time.time())
+
+    if getattr(env_cfg, "object_pose_cfg", None) is None:
+        raise ValueError(
+            f"Task '{task_name}' env_cfg has no 'object_pose_cfg' attribute; "
+            "cannot resolve anchor frame for --object_poses."
+        )
+    episodes = load_episode_poses(args_cli.object_poses, env_cfg.object_pose_cfg)
+    if not episodes:
+        raise ValueError(
+            f"No 'status==full' episodes in {args_cli.object_poses}; nothing to replay."
+        )
+    print(f"Loaded {len(episodes)} replay episodes from {args_cli.object_poses}")
 
     is_direct_env = "Direct" in task_name
     _configure_env_cfg(env_cfg, args_cli, is_direct_env, output_dir, output_file_name)
@@ -273,6 +314,15 @@ def main():
         print(f"Resume recording from existing dataset file with {resume_recorded_demo_count} demonstrations.")
     current_recorded_demo_count = resume_recorded_demo_count
 
+    next_episode_idx = min(resume_recorded_demo_count, len(episodes))
+    if next_episode_idx >= len(episodes):
+        print(f"Resume count {next_episode_idx} ≥ total episodes {len(episodes)}; nothing to do.")
+        env.close()
+        simulation_app.close()
+        return
+    _apply_episode_poses(env, episodes[next_episode_idx])
+    next_episode_idx += 1
+
     start_record_state = False
     interrupted = False
 
@@ -291,8 +341,20 @@ def main():
                     dynamic_reset_gripper_effort_limit_sim(env, device)
 
                 if sm.is_episode_done:
-                    current_recorded_demo_count, start_record_state, should_break = _on_episode_done(
-                        env, sm, args_cli, resume_recorded_demo_count, current_recorded_demo_count, start_record_state
+                    (
+                        next_episode_idx,
+                        current_recorded_demo_count,
+                        start_record_state,
+                        should_break,
+                    ) = _on_episode_done(
+                        env,
+                        sm,
+                        args_cli,
+                        episodes,
+                        next_episode_idx,
+                        resume_recorded_demo_count,
+                        current_recorded_demo_count,
+                        start_record_state,
                     )
                     if should_break:
                         break
