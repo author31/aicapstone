@@ -9,7 +9,7 @@ file yields one replayed episode. Object placements are written via
 
 Usage:
     python scripts/datagen/generate.py \
-        --task LeIsaac-HCIS-CupStacking-SingleArm-v0 \
+        --task HCIS-CupStacking-SingleArm-v0 \
         --num_envs 1 --device cuda --enable_cameras \
         --record --dataset_file ./datasets/cup_stacking.hdf5 \
         --object_poses datasets/0210_kitchen/demos/mapping/object_poses.json
@@ -72,7 +72,7 @@ from simulator.utils.object_poses_loader import load_episode_poses
 # Maps gym task id → (StateMachineClass, device_type)
 TASK_REGISTRY = {
     "LeIsaac-SO101-PickOrange-v0": (PickOrangeStateMachine, "so101_state_machine"),
-    "LeIsaac-HCIS-CupStacking-SingleArm-v0": (CupStackingStateMachine, "keyboard"),
+    "HCIS-CupStacking-SingleArm-v0": (CupStackingStateMachine, "keyboard"),
 }
 
 
