@@ -293,6 +293,7 @@ gym.register(
 
 ## 7. Where to read next
 
+- [`standalone_env_config_export.md`](./standalone_env_config_export.md) — required reading if you self-implement an env config: how (and why) to export it as a standalone file so rollout/training can pick it up.
 - `packages/simulator/src/simulator/tasks/template/single_arm_franka_cfg.py` — the file you'll subclass most often.
 - `packages/simulator/src/simulator/utils/object_poses_loader.py` — the docstrings spell out the JSON schema and validation rules.
 - [LightwheelAI/leisaac](https://github.com/LightwheelAI/leisaac) — upstream LeIsaac for the asset configs, teleop devices, and the LeRobot dataset handler.
