@@ -42,6 +42,7 @@ Long-form guides live under [`docs/`](docs/):
 | [Exporting a self-implemented env config as a standalone file](docs/standalone_env_config_export.md) | Why and how to export an ad-hoc `ManagerBasedRLEnvCfg` subclass to a standalone config file before training / rollout. |
 | [LeRobot checkpoint format](docs/lerobot-model-format.md) | On-disk layout of a LeRobot `pretrained_model/` directory: the seven files inside, what each one stores, and inference load order. |
 | [LeRobot training procedure](docs/lerobot-training.md) | How to train a LeRobot imitation-learning policy on the host machine: prerequisites, `lerobot-train` flags, multi-GPU, and post-training upload/download. |
+| [Synthetic data generation pipeline (cup_stacking walkthrough)](docs/synthetic-data-generation.md) | End-to-end walkthrough of generating synthetic demonstration data for the cup_stacking task. |
 
 ## Available Packages
 
