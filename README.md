@@ -32,6 +32,16 @@ Use `make launch-isaaclab` for container work. Run training directly against the
 - `dependencies/` — vendored submodules (Isaac Lab, etc.)
 - `data/`, `datasets/`, `checkpoints/` — runtime artifacts
 
+## Documentation
+
+Long-form guides live under [`docs/`](docs/):
+
+| Document | Description |
+|----------|-------------|
+| [Isaac Lab + LeIsaac configuration tutorial](docs/isaaclab_leisaac_tutorial.md) | Walkthrough of the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and how to add a new task. |
+| [Exporting a self-implemented env config as a standalone file](docs/standalone_env_config_export.md) | Why and how to export an ad-hoc `ManagerBasedRLEnvCfg` subclass to a standalone config file before training / rollout. |
+| [LeRobot checkpoint format](docs/lerobot-model-format.md) | On-disk layout of a LeRobot `pretrained_model/` directory: the seven files inside, what each one stores, and inference load order. |
+
 ## Available Packages
 
 ### UMI (Universal Manipulation Interface)
