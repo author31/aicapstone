@@ -26,7 +26,7 @@ Use `make launch-isaaclab` for container work. Run training directly against the
 ### Layout
 
 - `packages/umi/` — UMI package
-- `packages/simulator/` — simulator config layer over upstream `leisaac`
+- `packages/simulator/` — simulator config layer over upstream Isaac Lab
 - `scripts/` — teleoperation, datagen, evaluation scripts
 - `umi_pipeline_configs/` — UMI SLAM pipeline configs
 - `dependencies/` — vendored submodules (Isaac Lab, etc.)
@@ -38,9 +38,10 @@ Long-form guides live under [`docs/`](docs/):
 
 | Document | Description |
 |----------|-------------|
-| [Isaac Lab + LeIsaac configuration tutorial](docs/isaaclab_leisaac_tutorial.md) | Walkthrough of the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and how to add a new task. |
+| [Isaac Lab configuration tutorial](docs/isaaclab_leisaac_tutorial.md) | Walkthrough of the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and how to add a new task. |
 | [Exporting a self-implemented env config as a standalone file](docs/standalone_env_config_export.md) | Why and how to export an ad-hoc `ManagerBasedRLEnvCfg` subclass to a standalone config file before training / rollout. |
 | [LeRobot checkpoint format](docs/lerobot-model-format.md) | On-disk layout of a LeRobot `pretrained_model/` directory: the seven files inside, what each one stores, and inference load order. |
+| [LeRobot training procedure](docs/lerobot-training.md) | How to train a LeRobot imitation-learning policy on the host machine: prerequisites, `lerobot-train` flags, multi-GPU, and post-training upload/download. |
 
 ## Available Packages
 
@@ -55,9 +56,9 @@ uv run umi run-slam-pipeline <pipeline-config> --session-dir <session> --task <t
 
 ### Isaac Lab / Isaac Sim
 
-Robot motion generation, synthetic data creation. Wraps upstream `leisaac` with project task configs in `packages/simulator/`.
+Robot motion generation, synthetic data creation. Wraps upstream Isaac Lab with project task configs in `packages/simulator/`.
 
-New to the task config layout? See [Isaac Lab + LeIsaac configuration tutorial](docs/isaaclab_leisaac_tutorial.md) — walks through the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and a recipe for adding a new task.
+New to the task config layout? See [Isaac Lab configuration tutorial](docs/isaaclab_leisaac_tutorial.md) — walks through the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and a recipe for adding a new task.
 
 #### Docker installation
 
@@ -94,7 +95,11 @@ Isaac Lab submodule must be initialized before build — `Dockerfile` fails fast
 
 #### LeRobot & Hugging Face Hub workflow
 
-Dataset transfer and training run on the **host machine** (training inside the container is significantly slower). Upload generated demos out of the container, then train on the host:
+Dataset transfer and training run on the **host machine** (training inside the container is significantly slower). Upload generated demos out of the container, then train on the host.
+
+For the full training procedure, flag reference, and multi-GPU instructions, see [LeRobot training procedure](docs/lerobot-training.md).
+
+Quick workflow:
 
 1. **Upload generated dataset.** From inside the container after datagen: `hf upload <dataset-repo> <local-dataset-dir> --repo-type dataset --revision <tag>`.
 2. **Download dataset on host.** `hf download <dataset-repo> --repo-type dataset --local-dir <dir> --revision <rev>`.
