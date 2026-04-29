@@ -204,6 +204,14 @@ hf auth login
 
 After upload the dataset is ready for `lerobot-train` on the host machine (see the README's "LeRobot & Hugging Face Hub workflow" section for the host-side training flow).
 
+### 5.1 Inspect the uploaded dataset
+
+You can preview your uploaded LeRobot dataset (episodes, camera views, actions) in the browser via the Hugging Face dataset visualizer:
+
+<https://huggingface.co/spaces/lerobot/visualize_dataset>
+
+Paste your `repo_id` (e.g. `HF-USER/name`) into the Space to browse the dataset.
+
 ---
 
 ## Quick checklist
