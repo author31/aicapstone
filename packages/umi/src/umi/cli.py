@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import click
 from umi.pipeline_executor import PipelineExecutor
+from umi.profiler import PipelineProfiler
 from umi.services.visualize_slam_gui import VisualizeSLAMGUI
 
 
@@ -12,8 +15,27 @@ def cli():
 @click.argument("config_path")
 @click.option("--session-dir", type=click.Path(exists=True), help="Override session directory from config file")
 @click.option("--task", type=click.Choice(["kitchen", "living_room", "dining_room"]), help="Specify task type")
-def run_slam_pipeline(config_path: str, session_dir: str, task:str):
-    executor = PipelineExecutor(config_path, session_dir_override=session_dir, task_override=task)
+@click.option("--profile/--no-profile", "-p", default=False,
+              help="Profile per-stage runtime and video counts; write CSV report.")
+@click.option("--profile-output", type=click.Path(),
+              help="Path for profile CSV. Default: {session_dir}/pipeline_profile.csv or ./pipeline_profile.csv")
+def run_slam_pipeline(config_path: str, session_dir: str, task: str, profile: bool, profile_output: str):
+    profiler = None
+    if profile:
+        if profile_output:
+            out_path = Path(profile_output)
+        elif session_dir:
+            out_path = Path(session_dir) / "pipeline_profile.csv"
+        else:
+            out_path = Path("pipeline_profile.csv")
+        profiler = PipelineProfiler(out_path)
+
+    executor = PipelineExecutor(
+        config_path,
+        session_dir_override=session_dir,
+        task_override=task,
+        profiler=profiler,
+    )
     executor.execute_all()
 
 

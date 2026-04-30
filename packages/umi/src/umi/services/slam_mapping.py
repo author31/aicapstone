@@ -35,6 +35,7 @@ class SLAMMappingService(BaseService):
         self.resolution = self.config.get("resolution", (2028, 2704))  # (height, width) following numpy standard
         self.mask_pts_json_path = self.config.get("mask_pts_json_path", None)
         self.enable_gui = self.config.get("enable_gui", False)
+        self.gui_lenient_exit = self.config.get("gui_lenient_exit", False)
 
         # Validate GUI setup if enabled
         if self.enable_gui:
@@ -193,7 +194,18 @@ class SLAMMappingService(BaseService):
 
             process.wait()
             if process.returncode != 0:
-                raise RuntimeError(f"SLAM mapping failed. Check logs at {stdout_path} for details.")
+                trajectory_csv = input_path / "mapping_camera_trajectory.csv"
+                artifacts_ok = map_path.exists() and trajectory_csv.exists()
+                if self.enable_gui and self.gui_lenient_exit and artifacts_ok:
+                    # Known GUI container memleak: container can exit non-zero
+                    # after valid map and trajectory have already been written.
+                    logger.warning(
+                        f"SLAM exited non-zero ({process.returncode}) under GUI mode "
+                        f"but expected artifacts exist; treating as success "
+                        f"(known GUI container memleak workaround)."
+                    )
+                else:
+                    raise RuntimeError(f"SLAM mapping failed. Check logs at {stdout_path} for details.")
 
         return {
             "map_path": str(map_path),
