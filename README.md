@@ -111,7 +111,19 @@ Quick workflow:
 
 ## Rollout (run inside the container)
 
-Run trained policy in sim. Entry: `scripts/evaluation/policy_inference_sync.py`. Flags: `--task`, `--policy_type`, `--policy_checkpoint_path`, `--policy_action_horizon`, `--device`, `--enable_cameras`.
+Run trained policy in sim. Entry: `scripts/rollout.py`. Flags: `--task`, `--policy_type`, `--policy_checkpoint_path`, `--policy_action_horizon`, `--device`, `--enable_cameras`.
+
+Example:
+
+```bash
+python scripts/rollout.py \
+    --task=LeIsaac-HCIS-CupStacking-SingleArm-v0 \
+    --policy_type=lerobot-diffusion \
+    --policy_checkpoint_path=tiny-diff \
+    --policy_action_horizon=1 \
+    --device=cuda \
+    --enable_cameras
+```
 
 ## License
 
