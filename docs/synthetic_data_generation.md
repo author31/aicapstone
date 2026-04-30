@@ -5,7 +5,7 @@ End-to-end walkthrough of producing a LeRobot-format dataset from an Isaac Lab t
 > Companion docs:
 > - [`isaaclab_leisaac_tutorial.md`](./isaaclab_leisaac_tutorial.md) — the env-config tree and templates.
 > - [`standalone_env_config_export.md`](./standalone_env_config_export.md) — why a task config must live as its own file.
-> - [`lerobot-model-format.md`](./lerobot-model-format.md) — the on-disk layout of a trained policy (downstream of this pipeline).
+> - [`lerobot_model_format.md`](./lerobot_model_format.md) — the on-disk layout of a trained policy (downstream of this pipeline).
 
 The pipeline has five stages:
 
