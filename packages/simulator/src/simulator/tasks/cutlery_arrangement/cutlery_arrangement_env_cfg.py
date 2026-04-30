@@ -12,7 +12,7 @@ from isaaclab.utils import configclass
 from leisaac.utils.general_assets import parse_usd_and_create_subassets
 from simulator import ASSETS_ROOT
 from simulator.utils.object_poses_loader import ObjectPoseConfig
-from simulator.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
+from simulator.assets.scenes.dining_room import DINING_ROOM_CFG, DINING_ROOM_USD_PATH
 
 from simulator.tasks.template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,
@@ -35,7 +35,7 @@ OBJECT_PITCH: float = 0.0
 class CutleryArrangementSceneCfg(SingleArmFrankaTaskSceneCfg):
     """Scene configuration for the cutlery arrangement task."""
 
-    scene: AssetBaseCfg = KITCHEN_CFG.replace(prim_path="{ENV_REGEX_NS}/Scene")
+    scene: AssetBaseCfg = DINING_ROOM_CFG.replace(prim_path="{ENV_REGEX_NS}/Scene")
 
     plate: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Scene/plate",
@@ -140,7 +140,7 @@ class CutleryArrangementEnvCfg(SingleArmFrankaTaskEnvCfg):
             "panda_finger_joint2": 0.04,
         }
 
-        parse_usd_and_create_subassets(KITCHEN_USD_PATH, self)
+        parse_usd_and_create_subassets(DINING_ROOM_USD_PATH, self)
 
         self.object_pose_cfg = ObjectPoseConfig(
             tag_to_object=TAG_TO_OBJECT,

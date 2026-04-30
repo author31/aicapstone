@@ -12,7 +12,7 @@ from isaaclab.utils import configclass
 from leisaac.utils.general_assets import parse_usd_and_create_subassets
 from simulator import ASSETS_ROOT
 from simulator.utils.object_poses_loader import ObjectPoseConfig
-from simulator.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
+from simulator.assets.scenes.kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
 
 from simulator.tasks.template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,

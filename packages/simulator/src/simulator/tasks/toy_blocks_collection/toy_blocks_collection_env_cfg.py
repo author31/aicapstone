@@ -12,7 +12,7 @@ from isaaclab.utils import configclass
 from leisaac.utils.general_assets import parse_usd_and_create_subassets
 from simulator import ASSETS_ROOT
 from simulator.utils.object_poses_loader import ObjectPoseConfig
-from simulator.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
+from simulator.assets.scenes.living_room import LIVING_ROOM_CFG, LIVING_ROOM_USD_PATH
 
 from simulator.tasks.template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,
@@ -35,7 +35,7 @@ OBJECT_PITCH: float = 0.0
 class ToyBlocksCollectionSceneCfg(SingleArmFrankaTaskSceneCfg):
     """Scene configuration for the toy blocks collection task."""
 
-    scene: AssetBaseCfg = KITCHEN_CFG.replace(prim_path="{ENV_REGEX_NS}/Scene")
+    scene: AssetBaseCfg = LIVING_ROOM_CFG.replace(prim_path="{ENV_REGEX_NS}/Scene")
 
     bridge: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Scene/bridge",
@@ -152,7 +152,7 @@ class ToyBlocksCollectionEnvCfg(SingleArmFrankaTaskEnvCfg):
             "panda_finger_joint2": 0.04,
         }
 
-        parse_usd_and_create_subassets(KITCHEN_USD_PATH, self)
+        parse_usd_and_create_subassets(LIVING_ROOM_USD_PATH, self)
 
         self.object_pose_cfg = ObjectPoseConfig(
             tag_to_object=TAG_TO_OBJECT,
