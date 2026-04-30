@@ -20,7 +20,18 @@ from isaaclab.app import AppLauncher
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="leisaac inference for leisaac in the simulation.")
-parser.add_argument("--task", type=str, default=None, help="Name of the task.")
+parser.add_argument(
+    "--task",
+    type=str,
+    default=None,
+    help=(
+        "Task to roll out. Accepts three forms: (1) a registered gym id (e.g."
+        " 'LeIsaac-HCIS-CupStacking-SingleArm-v0'); (2) a path to a Python file"
+        " (.py) that calls gym.register on import — useful for private/external"
+        " eval task definitions kept outside this repo; (3) a 'module:Class'"
+        " reference resolvable via importlib (e.g. 'my_pkg.tasks.eval:MyEvalCfg')."
+    ),
+)
 parser.add_argument("--step_hz", type=int, default=60, help="Environment stepping rate in Hz.")
 parser.add_argument("--seed", type=int, default=None, help="Seed of the environment.")
 parser.add_argument("--episode_length_s", type=float, default=60.0, help="Episode length in seconds.")
@@ -72,6 +83,9 @@ from leisaac.utils.env_utils import (
 )
 
 import leisaac  # noqa: F401
+import simulator.tasks  # noqa: F401  # registers in-tree gym ids before resolve_task runs
+
+from simulator.tasks.external import resolve_task
 
 
 class RateLimiter:
@@ -142,8 +156,9 @@ def preprocess_obs_dict(obs_dict: dict, model_type: str, language_instruction: s
 def main():
     """Running lerobot teleoperation with leisaac manipulation environment."""
 
-    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
-    task_type = get_task_type(args_cli.task)
+    task_id = resolve_task(args_cli.task)
+    env_cfg = parse_env_cfg(task_id, device=args_cli.device, num_envs=1)
+    task_type = get_task_type(task_id)
     env_cfg.use_teleop_device(task_type)
     env_cfg.seed = args_cli.seed if args_cli.seed is not None else int(time.time())
     env_cfg.episode_length_s = args_cli.episode_length_s
@@ -156,7 +171,7 @@ def main():
     env_cfg.recorders = None
 
     # create environment
-    env: ManagerBasedRLEnv = gym.make(args_cli.task, cfg=env_cfg).unwrapped
+    env: ManagerBasedRLEnv = gym.make(task_id, cfg=env_cfg).unwrapped
 
     # create policy
     model_type = args_cli.policy_type
