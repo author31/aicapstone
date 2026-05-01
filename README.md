@@ -1,26 +1,155 @@
 # AI Capstone
 
-Monorepo for AI Capstone. Two workflows under one uv workspace:
+# Human Demonstration Data Processing
 
-- **UMI** — real-world data collection.
-- **Isaac Lab / Isaac Sim** — robot motion generation, synthetic data creation, policy training/rollout via LeRobot.
+1. **Installation**
 
-Install:
+   ```bash
+   uv sync --package umi
+   ```
+
+2. **Activate the virtual environment**
+
+   ```bash
+   source .venv/bin/activate
+   ```
+
+   This makes `hf`, `lerobot-train`, and other installed commands available in your terminal.
+
+3. **Hugging Face login**
+
+   Create an access token at: <https://huggingface.co/docs/hub/en/security-tokens>
+
+   Then log in:
+
+   ```bash
+   hf auth login --token <YOUR_HF_TOKEN>
+   ```
+
+4. **Set your Hugging Face username**
+
+   Commands throughout this project use `${HF_USER}`. Set it once per terminal session:
+
+   ```bash
+   export HF_USER=<your-huggingface-username>
+   ```
+
+## After recording the demonstration videos, follow this practice
+
+1. Under `data/`, create a directory for this demo. Suggested name: `YYYYMMDD-taskname`. Add a `raw_videos/` subdirectory under it.
+2. Place the recorded videos in `data/YYYYMMDD-taskname/raw_videos/`.
+
+## Verify the recorded demonstration videos
+
+The SLAM mapping stage is fragile. To save time, run the verify pipeline first:
 
 ```bash
-uv sync
+uv run umi run-slam-pipeline umi_pipeline_configs/verify_pipeline.yaml \
+    --session-dir <demo_directory_name>
 ```
+
+## If verification fails, re-record and copy into the demo directory
+
+There are several failure modes:
+
+### SLAM failures
+
+Pipeline raises:
+
+```
+RuntimeError: SLAM mapping failed. Check logs at datasets/team_asia/demos/mapping/slam_stdout.txt for details.
+```
+
+Re-record the mapping video, replace the file, and re-run the verification pipeline.
+
+## If verification succeeds, run the full pipeline
+
+```bash
+uv run umi run-slam-pipeline umi_pipeline_configs/build_dataset.yaml \
+    --session-dir <demo_directory_name> \
+    --task <kitchen|dining_room|living_room>
+```
+
+Upload the whole session directory to the Hugging Face Hub:
+
+```bash
+hf upload ${HF_USER}/<repo_id> data/<demo_directory_name>/demos/mapping/object_poses.json
+```
+
+# Data Creation in Simulator
+
+## Prerequisites
+
+1. **Linux machine with Nvidia GPU** — verify with `nvidia-smi`. Isaac Lab requires a Linux host with an Nvidia driver.
+2. **Docker installed** — the simulator runs inside a container.
+3. **Repository cloned** — if you haven't already:
+   ```bash
+   git clone https://github.com/HCIS-Lab/aicapstone.git
+   cd aicapstone
+   ```
+
+## Launch Isaac Lab
+
+```bash
+make launch-isaaclab
+```
+
+This builds the Isaac Sim container. On success, the shell drops you inside the container.
+
+Download the session directory produced by the UMI pipeline:
+
+```bash
+hf download ${HF_USER}/<repo_id> --local-dir data/<demo_directory_name>
+```
+
+## Run the data generation pipeline
+
+The `--lerobot_dataset_repo_id` should be your own Hugging Face dataset repo.
+
+Available tasks:
+
+- `HCIS-CupStacking-SingleArm-v0`
+- `HCIS-CutleryArrangement-SingleArm-v0`
+- `HCIS-ToyBlocksCollection-SingleArm-v0`
+
+```bash
+python scripts/datagen/generate.py \
+    --task HCIS-CupStacking-SingleArm-v0 \
+    --num_envs 1 \
+    --device cuda \
+    --enable_cameras \
+    --num_demos <number_of_demos> \
+    --record \
+    --use_lerobot_recorder \
+    --lerobot_dataset_repo_id ${HF_USER}/<repo_id> \
+    --object_poses data/<demo_directory_name>/object_poses.json
+```
+
+Upload the recorded dataset to Hugging Face Hub:
+
+```bash
+hf upload ${HF_USER}/<repo_id> ~/.cache/huggingface/lerobot/${HF_USER}/<repo_id>/
+```
+
+# LeRobot training
+see [LeRobot Training Procedure](/docs/lerobot_training.md).
+
+# LeRobot rollout
+see [LeRobot Rollout Procedure](/docs/lerobot_rollout.md).
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
-| [Developer introduction](docs/dev/introduction.md) | Setup, layout, Docker install, container usage, LeRobot/HF workflow, rollout. Start here. |
-| [Isaac Lab configuration tutorial](docs/isaaclab_leisaac_tutorial.md) | Walkthrough of the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and how to add a new task. |
-| [Exporting a self-implemented env config as a standalone file](docs/standalone_env_config_export.md) | Why and how to export an ad-hoc `ManagerBasedRLEnvCfg` subclass to a standalone config file before training / rollout. |
-| [LeRobot checkpoint format](docs/lerobot_model_format.md) | On-disk layout of a LeRobot `pretrained_model/` directory: the seven files inside, what each one stores, and inference load order. |
-| [LeRobot training procedure](docs/lerobot_training.md) | How to train a LeRobot imitation-learning policy on the host machine: prerequisites, `lerobot-train` flags, multi-GPU, and post-training upload/download. |
-| [Synthetic data generation pipeline (cup_stacking walkthrough)](docs/synthetic_data_generation.md) | End-to-end walkthrough of generating synthetic demonstration data for the cup_stacking task. |
-| [UMI SLAM pipeline](docs/umi_pipeline.md) | Recording → verify → build_dataset workflow for UMI sessions. |
+| [Isaac Lab + LeIsaac Configuration Tutorial](docs/isaaclab_leisaac_tutorial.md) | Configuring Isaac Lab with LeIsaac |
+| [LeRobot Dataset Visualizer](docs/lerobot_dataset_visualizer.md) | Visualizing LeRobot datasets |
+| [LeRobot Checkpoint Format](docs/lerobot_model_format.md) | Understanding LeRobot model checkpoint structure |
+| [LeRobot Rollout (Policy Evaluation)](docs/lerobot_rollout.md) | Running trained policies in the simulator |
+| [LeRobot Training Procedure](docs/lerobot_training.md) | Training imitation-learning policies |
+| [Standalone Env Config Export](docs/standalone_env_config_export.md) | Exporting environment configs as standalone files |
+| [Synthetic Data Generation Pipeline](docs/synthetic_data_generation.md) | Generating synthetic training data |
+| [UMI Pipeline](docs/umi_pipeline.md) | Data collection and processing with UMI |
+
+## License
 
 MIT — see [LICENSE](LICENSE).
