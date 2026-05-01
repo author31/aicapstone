@@ -1,40 +1,35 @@
-# Vendored from upstream LeIsaac.
-# Source: https://github.com/LightwheelAI/leisaac/blob/main/scripts/evaluation/policy_inference.py
-# Resolved SHA: 6b933e80786a69eb27d47503d11725c9c846566e (tip of `main` carrying this file).
-# Rename note: README §Rollout previously pointed at `scripts/evaluation/policy_inference_sync.py`,
-# which does not exist upstream. Per owner direction (AUT-81, 2026-04-30), the upstream
-# `policy_inference.py` (the synchronous inference entry point) is vendored here as
-# `scripts/rollout.py` at the top level of `scripts/` (NOT under `scripts/evaluation/`).
-# Behavior is identical to upstream; only filename, README path, and this header changed.
+# Synchronous LeRobot rollout script for LeIsaac.
+# Derived partially from upstream LeIsaac
+# `scripts/evaluation/policy_inference.py`
+# (https://github.com/LightwheelAI/leisaac/blob/main/scripts/evaluation/policy_inference.py
+# @ SHA 6b933e80786a69eb27d47503d11725c9c846566e), trimmed to local LeRobot
+# inference and extended with a dual-viewport setup, a debug shape printer,
+# and an in-process LeRobotSyncPolicy. Entry point lives at the top of
+# `scripts/` (NOT under `scripts/evaluation/`) per AUT-81.
 
-"""Script to run a leisaac inference with leisaac in the simulation."""
+"""Run local LeRobot policy inference in the same process as Isaac Sim."""
 
 """Launch Isaac Sim Simulator first."""
 import multiprocessing
 
 if multiprocessing.get_start_method() != "spawn":
     multiprocessing.set_start_method("spawn", force=True)
+
 import argparse
 
 from isaaclab.app import AppLauncher
 
-# add argparse arguments
-parser = argparse.ArgumentParser(description="leisaac inference for leisaac in the simulation.")
-parser.add_argument(
-    "--task",
-    type=str,
-    default=None,
-    help=(
-        "Task to roll out. Accepts three forms: (1) a registered gym id (e.g."
-        " 'LeIsaac-HCIS-CupStacking-SingleArm-v0'); (2) a path to a Python file"
-        " (.py) that calls gym.register on import — useful for private/external"
-        " eval task definitions kept outside this repo; (3) a 'module:Class'"
-        " reference resolvable via importlib (e.g. 'my_pkg.tasks.eval:MyEvalCfg')."
-    ),
+parser = argparse.ArgumentParser(
+    description="Synchronous LeRobot inference for LeIsaac simulation."
 )
-parser.add_argument("--step_hz", type=int, default=60, help="Environment stepping rate in Hz.")
+parser.add_argument("--task", type=str, default=None, help="Name of the task.")
+parser.add_argument(
+    "--step_hz", type=int, default=60, help="Environment stepping rate in Hz."
+)
 parser.add_argument("--seed", type=int, default=None, help="Seed of the environment.")
-parser.add_argument("--episode_length_s", type=float, default=60.0, help="Episode length in seconds.")
+parser.add_argument(
+    "--episode_length_s", type=float, default=60.0, help="Episode length in seconds."
+)
 parser.add_argument(
     "--eval_rounds",
     type=int,
@@ -47,70 +42,136 @@ parser.add_argument(
 parser.add_argument(
     "--policy_type",
     type=str,
-    default="gr00tn1.5",
-    help="Type of policy to use. support gr00tn1.5, gr00tn1.6, lerobot-<model_type>, openpi",
+    default="lerobot-smolvla",
+    help="Local LeRobot policy type. Use lerobot-, for example lerobot-smolvla.",
 )
-parser.add_argument("--policy_host", type=str, default="localhost", help="Host of the policy server.")
-parser.add_argument("--policy_port", type=int, default=5555, help="Port of the policy server.")
-parser.add_argument("--policy_timeout_ms", type=int, default=15000, help="Timeout of the policy server.")
-parser.add_argument("--policy_action_horizon", type=int, default=16, help="Action horizon of the policy.")
-parser.add_argument("--policy_language_instruction", type=str, default=None, help="Language instruction of the policy.")
-parser.add_argument("--policy_checkpoint_path", type=str, default=None, help="Checkpoint path of the policy.")
+parser.add_argument(
+    "--policy_action_horizon",
+    type=int,
+    default=16,
+    help="Number of actions to execute per policy call.",
+)
+parser.add_argument(
+    "--policy_language_instruction",
+    type=str,
+    default=None,
+    help="Language instruction of the policy.",
+)
+parser.add_argument(
+    "--policy_checkpoint_path",
+    type=str,
+    required=True,
+    help="Path to the local LeRobot checkpoint.",
+)
+parser.add_argument(
+    "--debug_policy_shapes",
+    action="store_true",
+    help="Print observation and action tensor shapes around each local LeRobot inference call.",
+)
 
-
-# append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
-# parse the arguments
 args_cli = parser.parse_args()
 
-app_launcher_args = vars(args_cli)
-
-# launch omniverse app
-app_launcher = AppLauncher(app_launcher_args)
+app_launcher = AppLauncher(vars(args_cli))
 simulation_app = app_launcher.app
 
 import time
+from typing import Any
+
+import omni.ui as ui
+import omni.kit.app
+import omni.kit.viewport.utility as vp_util
 
 import carb
 import gymnasium as gym
+import numpy as np
 import omni
 import torch
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.sensors import Camera
 from isaaclab_tasks.utils import parse_env_cfg
+from lerobot.async_inference.helpers import raw_observation_to_observation
+from lerobot.policies.factory import get_policy_class, make_pre_post_processors
+from lerobot.policies.utils import populate_queues
+from lerobot.utils.constants import ACTION, OBS_IMAGES
+
+from leisaac.utils.constant import FRANKA_JOINT_NAMES, SINGLE_ARM_JOINT_NAMES
 from leisaac.utils.env_utils import (
     dynamic_reset_gripper_effort_limit_sim,
     get_task_type,
 )
+from leisaac.utils.robot_utils import (
+    convert_leisaac_action_to_lerobot,
+    convert_lerobot_action_to_leisaac,
+)
 
 import leisaac  # noqa: F401
-import simulator.tasks  # noqa: F401  # registers in-tree gym ids before resolve_task runs
 
-from simulator.tasks.external import resolve_task
+
+def setup_dual_viewports():
+    """Setup dual viewports: main perspective view and GoPro camera view."""
+    perspective_path = "/World/envs/env_0/Robot/panda_hand/wrist"
+
+    # Get main viewport window
+    v1_window = ui.Workspace.get_window("Viewport")
+    if not v1_window:
+        print("Error: Main viewport window not found")
+        return
+
+    v1_api = vp_util.get_viewport_from_window_name("Viewport")
+    if v1_api:
+        v1_api.camera_path = perspective_path
+
+    # Get or create secondary viewport window
+    v2_window = ui.Workspace.get_window("Viewport 2")
+    if not v2_window:
+        v2_window = vp_util.create_viewport_window("Viewport 2")
+        # Important: Wait for UI to register the new window
+        omni.kit.app.get_app().update()  # Synchronous frame update
+
+    v2_api = vp_util.get_viewport_from_window_name("Viewport 2")
+    if v2_api:
+        v2_api.camera_path = f"/World/front_camera"
+
+    # Ensure both windows exist before docking
+    if v1_window and v2_window:
+        # Wait for UI to stabilize before docking
+        omni.kit.app.get_app().update()
+
+        # Attempt docking with error handling
+        try:
+            v2_window.dock_in(v1_window, ui.DockPosition.RIGHT)
+            print("Viewports docked: [Viewport (Persp)] | [Viewport 2 (Camera)]")
+        except Exception as e:
+            print(f"Docking failed: {str(e)}")
+            # Alternative docking approach if direct docking fails
+            try:
+                # Try docking after another frame
+                omni.kit.app.get_app().update()
+                v2_window.dock_in(v1_window, ui.DockPosition.RIGHT)
+                print("Viewports docked on second attempt")
+            except Exception as e2:
+                print(f"Second docking attempt failed: {str(e2)}")
+    else:
+        print("Error: Could not find one or both viewport windows for docking.")
 
 
 class RateLimiter:
     """Convenience class for enforcing rates in loops."""
 
     def __init__(self, hz):
-        """
-        Args:
-            hz (int): frequency to enforce
-        """
         self.hz = hz
         self.last_time = time.time()
         self.sleep_duration = 1.0 / hz
         self.render_period = min(0.0166, self.sleep_duration)
 
     def sleep(self, env):
-        """Attempt to sleep at the specified rate in hz."""
         next_wakeup_time = self.last_time + self.sleep_duration
         while time.time() < next_wakeup_time:
             time.sleep(self.render_period)
             env.sim.render()
 
         self.last_time = self.last_time + self.sleep_duration
-
-        # detect time jumping forwards (e.g. loop is too slow)
         if self.last_time < time.time():
             while self.last_time < time.time():
                 self.last_time += self.sleep_duration
@@ -128,146 +189,285 @@ class Controller:
         self.reset_state = False
 
     def __del__(self):
-        """Release the keyboard interface."""
-        if hasattr(self, "_input") and hasattr(self, "_keyboard") and hasattr(self, "_keyboard_sub"):
-            self._input.unsubscribe_from_keyboard_events(self._keyboard, self._keyboard_sub)
+        if (
+            hasattr(self, "_input")
+            and hasattr(self, "_keyboard")
+            and hasattr(self, "_keyboard_sub")
+        ):
+            self._input.unsubscribe_from_keyboard_events(
+                self._keyboard, self._keyboard_sub
+            )
             self._keyboard_sub = None
 
     def reset(self):
         self.reset_state = False
 
     def _on_keyboard_event(self, event, *args, **kwargs):
-        """Handle keyboard events using carb."""
         if event.type == carb.input.KeyboardEventType.KEY_PRESS:
             if event.input.name == "R":
                 self.reset_state = True
         return True
 
 
-def preprocess_obs_dict(obs_dict: dict, model_type: str, language_instruction: str):
-    """Preprocess the observation dictionary to the format expected by the policy."""
-    if model_type in ["gr00tn1.5", "gr00tn1.6", "lerobot", "openpi"]:
-        obs_dict["task_description"] = language_instruction
-        return obs_dict
-    else:
-        raise ValueError(f"Model type {model_type} not supported")
+def _shape_summary(value: Any) -> str:
+    if isinstance(value, torch.Tensor):
+        return f"Tensor(shape={tuple(value.shape)}, dtype={value.dtype}, device={value.device})"
+    if isinstance(value, np.ndarray):
+        return f"ndarray(shape={value.shape}, dtype={value.dtype})"
+    return type(value).__name__
+
+
+def _print_mapping_shapes(title: str, values: dict[str, Any]) -> None:
+    print(title)
+    for key in sorted(values):
+        print(f"  {key}: {_shape_summary(values[key])}")
+
+
+class LeRobotSyncPolicy:
+    """Local LeRobot inference path matching the async server pipeline."""
+
+    def __init__(
+        self,
+        policy_type: str,
+        pretrained_name_or_path: str,
+        task_type: str,
+        camera_infos: dict[str, tuple[int, int]],
+        actions_per_chunk: int,
+        device: str,
+        debug_policy_shapes: bool = False,
+    ):
+        if actions_per_chunk <= 0:
+            raise ValueError(
+                f"policy_action_horizon must be positive, got {actions_per_chunk}."
+            )
+
+        self.task_type = task_type
+        self.actions_per_chunk = actions_per_chunk
+        self.device = device
+        self.debug_policy_shapes = debug_policy_shapes
+
+        if task_type == "so101leader":
+            self.state_joint_names = SINGLE_ARM_JOINT_NAMES
+            self.action_dim = len(SINGLE_ARM_JOINT_NAMES)
+        elif task_type == "franka_panda":
+            self.state_joint_names = FRANKA_JOINT_NAMES
+            self.action_dim = 8
+        else:
+            raise ValueError(
+                f"Task type {task_type} not supported for synchronous LeRobot inference yet."
+            )
+
+        self.lerobot_features = self._build_lerobot_features(camera_infos)
+        self.camera_keys = list(camera_infos.keys())
+
+        print(
+            f"Loading local LeRobot policy '{policy_type}' from {pretrained_name_or_path}..."
+        )
+        policy_class = get_policy_class(policy_type)
+        self.policy = policy_class.from_pretrained(pretrained_name_or_path, local_files_only=True)
+        self.policy.to(device)
+        self.policy.eval()
+
+        device_override = {"device": device}
+        self.preprocessor, self.postprocessor = make_pre_post_processors(
+            self.policy.config,
+            pretrained_path=pretrained_name_or_path,
+            preprocessor_overrides={
+                "device_processor": device_override,
+                "rename_observations_processor": {"rename_map": {}},
+            },
+            postprocessor_overrides={"device_processor": device_override},
+        )
+        print("Local LeRobot policy is ready.")
+
+    def reset(self):
+        policy_reset = getattr(self.policy, "reset", None)
+        if callable(policy_reset):
+            policy_reset()
+
+    def _build_lerobot_features(
+        self, camera_infos: dict[str, tuple[int, int]]
+    ) -> dict[str, dict]:
+        features = {
+            "observation.state": {
+                "dtype": "float32",
+                "shape": (len(self.state_joint_names),),
+                "names": [f"{joint_name}.pos" for joint_name in self.state_joint_names],
+            }
+        }
+        for camera_key, camera_image_shape in camera_infos.items():
+            features[f"observation.images.{camera_key}"] = {
+                "dtype": "image",
+                "shape": (camera_image_shape[0], camera_image_shape[1], 3),
+                "names": ["height", "width", "channels"],
+            }
+        return features
+
+    def _build_raw_observation(self, observation_dict: dict) -> dict[str, Any]:
+        raw_observation = {
+            key: observation_dict[key].cpu().numpy().astype(np.uint8)[0]
+            for key in self.camera_keys
+        }
+        raw_observation["task"] = observation_dict["task_description"]
+
+        if self.task_type == "so101leader":
+            joint_pos = convert_leisaac_action_to_lerobot(observation_dict["joint_pos"])
+        elif self.task_type == "franka_panda":
+            joint_pos = observation_dict["joint_pos"].cpu().numpy()
+        else:
+            raise ValueError(
+                f"Task type {self.task_type} not supported for synchronous LeRobot inference yet."
+            )
+
+        for joint_index, joint_name in enumerate(self.state_joint_names):
+            raw_observation[f"{joint_name}.pos"] = joint_pos[0, joint_index].item()
+
+        return raw_observation
+
+    def _config_horizon_summary(self) -> str:
+        names = ["chunk_size", "n_action_steps", "action_chunk_size", "action_horizon"]
+        values = []
+        for name in names:
+            if hasattr(self.policy.config, name):
+                values.append(f"{name}={getattr(self.policy.config, name)}")
+        return ", ".join(values) if values else "no known horizon fields found"
+
+    def _prepare_observation(self, raw_observation: dict[str, Any]) -> dict[str, Any]:
+        observation = raw_observation_to_observation(
+            raw_observation,
+            self.lerobot_features,
+            self.policy.config.image_features,
+        )
+        if self.debug_policy_shapes:
+            _print_mapping_shapes("[SyncPolicy] Prepared observation:", observation)
+
+        observation = self.preprocessor(observation)
+        if self.debug_policy_shapes:
+            _print_mapping_shapes("[SyncPolicy] Preprocessed observation:", observation)
+        return observation
+
+    def _predict_lerobot_actions(self, observation: dict[str, Any]) -> torch.Tensor:
+        with torch.inference_mode():
+            action = self.policy.select_action(observation)
+        return self.postprocessor(action)
+
+    def _convert_actions_to_leisaac(self, action_tensor: torch.Tensor) -> np.ndarray:
+        if self.task_type == "so101leader":
+            actions = convert_lerobot_action_to_leisaac(action_tensor)
+        elif self.task_type == "franka_panda":
+            actions = action_tensor.to("cpu").numpy()
+        else:
+            raise ValueError(
+                f"Task type {self.task_type} not supported for synchronous LeRobot inference yet."
+            )
+
+        if actions.shape[-1] != self.action_dim:
+            raise ValueError(
+                f"Expected {self.action_dim} action values for task type {self.task_type}, got {actions.shape[-1]}."
+            )
+        return actions
+
+    def get_action(self, observation_dict: dict) -> torch.Tensor:
+        raw_observation = self._build_raw_observation(observation_dict)
+        if self.debug_policy_shapes:
+            _print_mapping_shapes("[SyncPolicy] Raw observation:", raw_observation)
+
+        observation = self._prepare_observation(raw_observation)
+        action_tensor = self._predict_lerobot_actions(observation)
+        actions = self._convert_actions_to_leisaac(action_tensor)
+        return torch.from_numpy(actions[:, None, :])
+
+
+def preprocess_obs_dict(obs_dict: dict, language_instruction: str):
+    obs_dict["task_description"] = language_instruction
+    return obs_dict
+
+
+def get_policy_type(policy_type_arg: str) -> str:
+    if not policy_type_arg.startswith("lerobot-"):
+        raise ValueError(
+            f"policy_inference_sync.py only supports local LeRobot policies, got '{policy_type_arg}'. "
+            "Use --policy_type=lerobot-."
+        )
+    return policy_type_arg.split("lerobot-", 1)[1]
+
+
+def get_camera_infos(
+    env: ManagerBasedRLEnv, policy_obs_dict: dict
+) -> dict[str, tuple[int, int]]:
+    camera_infos = {}
+    for key, sensor in env.scene.sensors.items():
+        if isinstance(sensor, Camera) and key in policy_obs_dict:
+            camera_infos[key] = sensor.image_shape
+    return camera_infos
 
 
 def main():
-    """Running lerobot teleoperation with leisaac manipulation environment."""
-
-    task_id = resolve_task(args_cli.task)
-    env_cfg = parse_env_cfg(task_id, device=args_cli.device, num_envs=1)
-    task_type = get_task_type(task_id)
-    env_cfg.use_teleop_device(task_type)
+    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
+    task_type = get_task_type(args_cli.task)
+    robot_name = getattr(env_cfg, "robot_name", None)
+    policy_task_type = "franka_panda" if robot_name == "franka_panda" else task_type
+    teleop_device = "keyboard" if policy_task_type == "franka_panda" else task_type
+    env_cfg.use_teleop_device(teleop_device)
     env_cfg.seed = args_cli.seed if args_cli.seed is not None else int(time.time())
     env_cfg.episode_length_s = args_cli.episode_length_s
 
-    # modify configuration
     if args_cli.eval_rounds <= 0:
         if hasattr(env_cfg.terminations, "time_out"):
             env_cfg.terminations.time_out = None
     max_episode_count = args_cli.eval_rounds
     env_cfg.recorders = None
 
-    # create environment
-    env: ManagerBasedRLEnv = gym.make(task_id, cfg=env_cfg).unwrapped
+    env: ManagerBasedRLEnv = gym.make(args_cli.task, cfg=env_cfg).unwrapped
+    obs_dict, _ = env.reset()
 
-    # create policy
-    model_type = args_cli.policy_type
-    if args_cli.policy_type == "gr00tn1.5":
-        from isaaclab.sensors import Camera
-        from leisaac.policy import Gr00tServicePolicyClient
+    language_instruction = args_cli.policy_language_instruction
+    if language_instruction is None:
+        language_instruction = getattr(env_cfg, "task_description", None)
 
-        if task_type == "so101leader":
-            modality_keys = ["single_arm", "gripper"]
-        else:
-            raise ValueError(f"Task type {task_type} not supported when using GR00T N1.5 policy yet.")
+    policy_obs_dict = preprocess_obs_dict(obs_dict["policy"], language_instruction)
+    camera_infos = get_camera_infos(env, policy_obs_dict)
 
-        policy = Gr00tServicePolicyClient(
-            host=args_cli.policy_host,
-            port=args_cli.policy_port,
-            timeout_ms=args_cli.policy_timeout_ms,
-            camera_keys=[key for key, sensor in env.scene.sensors.items() if isinstance(sensor, Camera)],
-            modality_keys=modality_keys,
-        )
-    elif args_cli.policy_type == "gr00tn1.6":
-        from isaaclab.sensors import Camera
-        from leisaac.policy import Gr00t16ServicePolicyClient
-
-        if task_type == "so101leader":
-            modality_keys = ["single_arm", "gripper"]
-        else:
-            raise ValueError(f"Task type {task_type} not supported when using GR00T N1.5 policy yet.")
-
-        policy = Gr00t16ServicePolicyClient(
-            host=args_cli.policy_host,
-            port=args_cli.policy_port,
-            timeout_ms=args_cli.policy_timeout_ms,
-            camera_keys=[key for key, sensor in env.scene.sensors.items() if isinstance(sensor, Camera)],
-            modality_keys=modality_keys,
-        )
-
-    elif "lerobot" in args_cli.policy_type:
-        from isaaclab.sensors import Camera
-        from leisaac.policy import LeRobotServicePolicyClient
-
-        model_type = "lerobot"
-
-        policy_type = args_cli.policy_type.split("-")[1]
-        policy = LeRobotServicePolicyClient(
-            host=args_cli.policy_host,
-            port=args_cli.policy_port,
-            timeout_ms=args_cli.policy_timeout_ms,
-            camera_infos={
-                key: sensor.image_shape for key, sensor in env.scene.sensors.items() if isinstance(sensor, Camera)
-            },
-            task_type=task_type,
-            policy_type=policy_type,
-            pretrained_name_or_path=args_cli.policy_checkpoint_path,
-            actions_per_chunk=args_cli.policy_action_horizon,
-            device=args_cli.device,
-        )
-    elif args_cli.policy_type == "openpi":
-        from isaaclab.sensors import Camera
-        from leisaac.policy import OpenPIServicePolicyClient
-
-        policy = OpenPIServicePolicyClient(
-            host=args_cli.policy_host,
-            port=args_cli.policy_port,
-            camera_keys=[key for key, sensor in env.scene.sensors.items() if isinstance(sensor, Camera)],
-            task_type=task_type,
-        )
+    policy = LeRobotSyncPolicy(
+        policy_type=get_policy_type(args_cli.policy_type),
+        pretrained_name_or_path=args_cli.policy_checkpoint_path,
+        task_type=policy_task_type,
+        camera_infos=camera_infos,
+        actions_per_chunk=args_cli.policy_action_horizon,
+        device=args_cli.device,
+        debug_policy_shapes=args_cli.debug_policy_shapes,
+    )
 
     rate_limiter = RateLimiter(args_cli.step_hz)
     controller = Controller()
-
-    # reset environment
-    obs_dict, _ = env.reset()
     controller.reset()
 
-    # record the results
-    success_count, episode_count = 0, 1
+    setup_dual_viewports()
 
-    # simulate environment
+
+    success_count, episode_count = 0, 1
     while max_episode_count <= 0 or episode_count <= max_episode_count:
         print(f"[Evaluation] Evaluating episode {episode_count}...")
         success, time_out = False, False
         while simulation_app.is_running():
-            # run everything in inference mode
             with torch.inference_mode():
                 if controller.reset_state:
                     controller.reset()
                     obs_dict, _ = env.reset()
+                    policy.reset()
                     episode_count += 1
                     break
 
-                obs_dict = preprocess_obs_dict(obs_dict["policy"], model_type, args_cli.policy_language_instruction)
-                actions = policy.get_action(obs_dict).to(env.device)
-                for i in range(min(args_cli.policy_action_horizon, actions.shape[0])):
-                    action = actions[i, :, :]
+                policy_obs_dict = preprocess_obs_dict(
+                    obs_dict["policy"], language_instruction
+                )
+                actions = policy.get_action(policy_obs_dict).to(env.device)
+                for action_index in range(
+                    min(args_cli.policy_action_horizon, actions.shape[0])
+                ):
+                    action = actions[action_index, :, :]
                     if env.cfg.dynamic_reset_gripper_effort_limit:
-                        dynamic_reset_gripper_effort_limit_sim(env, task_type)
+                        dynamic_reset_gripper_effort_limit_sim(env, teleop_device)
                     obs_dict, _, reset_terminated, reset_time_outs, _ = env.step(action)
                     if reset_terminated[0]:
                         success = True
@@ -281,25 +481,26 @@ def main():
                 print(f"[Evaluation] Episode {episode_count} is successful!")
                 episode_count += 1
                 success_count += 1
+                policy.reset()
                 break
             if time_out:
                 print(f"[Evaluation] Episode {episode_count} timed out!")
                 episode_count += 1
+                policy.reset()
                 break
         print(
             f"[Evaluation] now success rate: {success_count / (episode_count - 1)} "
             f" [{success_count}/{episode_count - 1}]"
         )
+
     print(
         f"[Evaluation] Final success rate: {success_count / max_episode_count:.3f} "
         f" [{success_count}/{max_episode_count}]"
     )
 
-    # close the simulator
     env.close()
     simulation_app.close()
 
 
 if __name__ == "__main__":
-    # run the main function
     main()

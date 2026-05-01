@@ -2,7 +2,7 @@
 
 A walkthrough of how a task is wired together in this repo, aimed at newcomers who have read the Isaac Lab docs but never opened our `packages/simulator/` tree.
 
-The running example is `LeIsaac-HCIS-CupStacking-SingleArm-v0`. Files referenced:
+The running example is `HCIS-CupStacking-SingleArm-v0`. Files referenced:
 
 - `packages/simulator/src/simulator/tasks/template/single_arm_franka_cfg.py` — reusable base config for any single-arm Franka task.
 - `packages/simulator/src/simulator/tasks/cup_stacking/cup_stacking_env_cfg.py` — concrete cup-stacking task built on top of the template.
@@ -244,7 +244,7 @@ To wire a new task into this loader, define `TAG_TO_OBJECT`, `ANCHOR_TAG_ID`, `A
 ```python
 # packages/simulator/src/simulator/tasks/cup_stacking/__init__.py
 gym.register(
-    id="LeIsaac-HCIS-CupStacking-SingleArm-v0",
+    id="HCIS-CupStacking-SingleArm-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={"env_cfg_entry_point": f"{__name__}.cup_stacking_env_cfg:CupStackingEnvCfg"},
@@ -252,7 +252,7 @@ gym.register(
 ```
 
 - `entry_point` is **always** `isaaclab.envs:ManagerBasedRLEnv` for this style of task — only the `env_cfg_entry_point` changes.
-- The id pattern is `LeIsaac-HCIS-<TaskName>-<RobotKind>-v<N>`. Bump `vN` whenever you make a backwards-incompatible config change so old demo datasets stay associated with the right env.
+- The id pattern is `HCIS-<TaskName>-<RobotKind>-v<N>`. Bump `vN` whenever you make a backwards-incompatible config change so old demo datasets stay associated with the right env.
 
 ---
 
@@ -270,7 +270,7 @@ gym.register(
 
    ```bash
    uv run python scripts/environments/teleoperation/teleop_se3_agent.py \
-       --task=LeIsaac-HCIS-<MyTask>-SingleArm-v0 \
+       --task=HCIS-<MyTask>-SingleArm-v0 \
        --teleop_device=keyboard \
        --num_envs=1 \
        --device=cuda \

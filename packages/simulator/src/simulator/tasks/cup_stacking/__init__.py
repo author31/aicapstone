@@ -2,7 +2,7 @@ import gymnasium as gym
 
 
 gym.register(
-    id="LeIsaac-HCIS-CupStacking-SingleArm-v0",
+    id="HCIS-CupStacking-SingleArm-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={

@@ -1,5 +1,4 @@
 import math
-from pathlib import Path
 
 import isaaclab.sim as sim_utils
 import torch
@@ -12,8 +11,8 @@ from isaaclab.utils import configclass
 
 from leisaac.utils.general_assets import parse_usd_and_create_subassets
 from simulator import ASSETS_ROOT
-from simulator.utils.object_poses_loader import ObjectPoseConfig, load_object_poses
-from simulator.assets.scenes.ED305_kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
+from simulator.utils.object_poses_loader import ObjectPoseConfig
+from simulator.assets.scenes.kitchen import KITCHEN_CFG, KITCHEN_USD_PATH
 
 from simulator.tasks.template.single_arm_franka_cfg import (
     SingleArmFrankaObservationsCfg,
@@ -26,7 +25,7 @@ KITCHEN_OBJECTS_ROOT = ASSETS_ROOT / "scenes" / "kitchen" / "objects"
 
 TAG_TO_OBJECT: dict[int, str] = {1: "blue_cup", 2: "pink_cup"}
 ANCHOR_TAG_ID: int = 0
-ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.0, 0.0, 0.0)
+ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.5, -0.2, 0.0)
 OBJECT_Z: float = 0.12
 OBJECT_ROLL: float = 0.0
 OBJECT_PITCH: float = 0.0
@@ -43,7 +42,6 @@ class CupStackingSceneCfg(SingleArmFrankaTaskSceneCfg):
             usd_path=str(KITCHEN_OBJECTS_ROOT / "BlueCup" / "BlueCup.usd"),
             mass_props=MassPropertiesCfg(mass=0.1),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.36, -0.4, 0.12), rot=(1.0, 0.0, 0.0, 0.0)),
     )
 
     pink_cup: RigidObjectCfg = RigidObjectCfg(
@@ -52,7 +50,6 @@ class CupStackingSceneCfg(SingleArmFrankaTaskSceneCfg):
             usd_path=str(KITCHEN_OBJECTS_ROOT / "PinkCup" / "PinkCup.usd"),
             mass_props=MassPropertiesCfg(mass=0.1),
         ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.46, -0.4, 0.12), rot=(1.0, 0.0, 0.0, 0.0)),
     )
 
 
@@ -128,17 +125,11 @@ class CupStackingEnvCfg(SingleArmFrankaTaskEnvCfg):
 
         parse_usd_and_create_subassets(KITCHEN_USD_PATH, self)
 
-        if self.object_poses_path is not None:
-            pose_cfg = ObjectPoseConfig(
-                tag_to_object=TAG_TO_OBJECT,
-                anchor_tag_id=ANCHOR_TAG_ID,
-                anchor_world_pose=ANCHOR_WORLD_POSE,
-                object_z=OBJECT_Z,
-                object_roll=OBJECT_ROLL,
-                object_pitch=OBJECT_PITCH,
-            )
-            loaded_poses = load_object_poses(self.object_poses_path, pose_cfg)
-            for obj_name, (pos, rot) in loaded_poses.items():
-                obj_cfg = getattr(self.scene, obj_name)
-                obj_cfg.init_state.pos = pos
-                obj_cfg.init_state.rot = rot
+        self.object_pose_cfg = ObjectPoseConfig(
+            tag_to_object=TAG_TO_OBJECT,
+            anchor_tag_id=ANCHOR_TAG_ID,
+            anchor_world_pose=ANCHOR_WORLD_POSE,
+            object_z=OBJECT_Z,
+            object_roll=OBJECT_ROLL,
+            object_pitch=OBJECT_PITCH,
+        )
