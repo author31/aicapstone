@@ -66,7 +66,7 @@ Before kicking off the full reconstruction, run the verification pipeline. It ex
 
 ```
 uv run umi run-slam-pipeline \
-    umi_pipeline_configs/gopro13_fisheye_2-7k_verify_pipeline_config.yaml \
+    umi_pipeline_configs/verify_pipeline.yaml \
     --session-dir <NAME_OF_YOUR_DIR>/
 ```
 
@@ -119,13 +119,13 @@ If you trust your recording but the count threshold is too strict, lower `min_va
 
 ---
 
-## 4. Run the full reconstruction pipeline
+## 4. Build the dataset
 
-Once the verification pipeline exits 0, run the full reconstruct pipeline:
+Once the verification pipeline exits 0, run the dataset-building pipeline:
 
 ```
 uv run umi run-slam-pipeline \
-    umi_pipeline_configs/gopro13_fisheye_2-7k_reconstruct_pipeline_config.yaml \
+    umi_pipeline_configs/build_dataset.yaml \
     --session-dir <NAME_OF_YOUR_DIR>/
 ```
 
