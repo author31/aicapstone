@@ -40,9 +40,9 @@ Long-form guides live under [`docs/`](docs/):
 |----------|-------------|
 | [Isaac Lab configuration tutorial](docs/isaaclab_leisaac_tutorial.md) | Walkthrough of the single-arm Franka template, the cup-stacking task, UMI anchor pose loading, and how to add a new task. |
 | [Exporting a self-implemented env config as a standalone file](docs/standalone_env_config_export.md) | Why and how to export an ad-hoc `ManagerBasedRLEnvCfg` subclass to a standalone config file before training / rollout. |
-| [LeRobot checkpoint format](docs/lerobot-model-format.md) | On-disk layout of a LeRobot `pretrained_model/` directory: the seven files inside, what each one stores, and inference load order. |
-| [LeRobot training procedure](docs/lerobot-training.md) | How to train a LeRobot imitation-learning policy on the host machine: prerequisites, `lerobot-train` flags, multi-GPU, and post-training upload/download. |
-| [Synthetic data generation pipeline (cup_stacking walkthrough)](docs/synthetic-data-generation.md) | End-to-end walkthrough of generating synthetic demonstration data for the cup_stacking task. |
+| [LeRobot checkpoint format](docs/lerobot_model_format.md) | On-disk layout of a LeRobot `pretrained_model/` directory: the seven files inside, what each one stores, and inference load order. |
+| [LeRobot training procedure](docs/lerobot_training.md) | How to train a LeRobot imitation-learning policy on the host machine: prerequisites, `lerobot-train` flags, multi-GPU, and post-training upload/download. |
+| [Synthetic data generation pipeline (cup_stacking walkthrough)](docs/synthetic_data_generation.md) | End-to-end walkthrough of generating synthetic demonstration data for the cup_stacking task. |
 
 ## Available Packages
 
@@ -92,13 +92,13 @@ Isaac Lab submodule must be initialized before build — `Dockerfile` fails fast
 
 1. **Define task.** Task configs in `packages/simulator/`.
 2. **Keyboard teleoperation.** Run `scripts/environments/teleoperation/teleop_se3_agent.py` with task ID, device, num envs.
-3. **FSM planner datagen.** Run `scripts/datagen/state_machine/generate.py` with task, num demos, recorder flags, target dataset repo ID.
+3. **FSM planner datagen.** Run `scripts/datagen/generate.py` with task, recorder flags, target dataset repo ID, and `--object_poses <path>` pointing to a per-episode UMI `object_poses.json` (the schema produced by the UMI `frame_to_pose` service). Episode count is driven by that file: each entry with `status == "full"` yields one replayed episode — there is no `--num_demos` flag.
 
 #### LeRobot & Hugging Face Hub workflow
 
 Dataset transfer and training run on the **host machine** (training inside the container is significantly slower). Upload generated demos out of the container, then train on the host.
 
-For the full training procedure, flag reference, and multi-GPU instructions, see [LeRobot training procedure](docs/lerobot-training.md).
+For the full training procedure, flag reference, and multi-GPU instructions, see [LeRobot training procedure](docs/lerobot_training.md).
 
 Quick workflow:
 
@@ -109,9 +109,23 @@ Quick workflow:
 5. **Upload checkpoints.** `hf upload <model-repo> <local-ckpt-dir> --revision <tag>`.
 6. **Download checkpoints (back into the container for rollout).** `hf download <model-repo> --local-dir <dir> --revision <tag>`.
 
+Inspect uploaded datasets in the browser via the [LeRobot dataset visualizer](docs/lerobot_dataset_visualizer.md) — load by `repo_id` to spot-check episodes, action traces, and camera framing before training.
+
 ## Rollout (run inside the container)
 
-Run trained policy in sim. Entry: `scripts/evaluation/policy_inference_sync.py`. Flags: `--task`, `--policy_type`, `--policy_checkpoint_path`, `--policy_action_horizon`, `--device`, `--enable_cameras`.
+Run trained policy in sim. Entry: `scripts/rollout.py`. Flags: `--task`, `--policy_type`, `--policy_checkpoint_path`, `--policy_action_horizon`, `--device`, `--enable_cameras`.
+
+Example:
+
+```bash
+python scripts/rollout.py \
+    --task=LeIsaac-HCIS-CupStacking-SingleArm-v0 \
+    --policy_type=lerobot-diffusion \
+    --policy_checkpoint_path=tiny-diff \
+    --policy_action_horizon=1 \
+    --device=cuda \
+    --enable_cameras
+```
 
 ## License
 

@@ -174,8 +174,109 @@ Before you call your env config "exported":
 
 ---
 
+## 4. External / private rollout (file outside the repo tree)
+
+For private leaderboard tasks, secret eval scenes, and per-student variants
+the env config must stay **out of the public `aicapstone` tree**.
+`scripts/rollout.py` accepts `--task` in three forms, resolved by
+`simulator.tasks.external.resolve_task` (see AUT-80):
+
+| Form | Example |
+|---|---|
+| Registered gym id | `--task LeIsaac-HCIS-CupStacking-SingleArm-v0` |
+| Path to `.py` file | `--task /tmp/private_smoke/private_cup_stacking_smoke.py` |
+| `module:Class` ref | `--task my_pkg.tasks.eval:MyEvalCfg` |
+
+The external file must subclass an in-tree template, define a unique
+`TASK_ID`, and call `gym.register` at import time:
+
+```python
+# /tmp/private_smoke/private_cup_stacking_smoke.py
+import gymnasium as gym
+from isaaclab.utils import configclass
+from simulator.tasks.cup_stacking.cup_stacking_env_cfg import CupStackingEnvCfg
+
+
+@configclass
+class PrivateCupStackingSmokeEnvCfg(CupStackingEnvCfg):
+    task_description: str = "AUT-85 private smoke."
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.viewer.eye = (0.85, 0.90, 0.70)
+
+
+TASK_ID = "Private-Smoke-v0"
+
+gym.register(
+    id=TASK_ID,
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={"env_cfg_entry_point": f"{__name__}:PrivateCupStackingSmokeEnvCfg"},
+)
+```
+
+### 4.1 Reproducing the AUT-85 smoke locally
+
+From the host:
+
+```bash
+make launch-isaaclab
+```
+
+Inside the container shell:
+
+```bash
+# Stage the private file *outside* /workspace/aicapstone to prove there is
+# no in-tree side effect.
+mkdir -p /tmp/private_smoke
+cat > /tmp/private_smoke/private_cup_stacking_smoke.py <<'PY'
+# (paste the snippet from §4 above)
+PY
+
+# External .py path
+python scripts/rollout.py \
+    --task /tmp/private_smoke/private_cup_stacking_smoke.py \
+    --policy_type=lerobot-diffusion \
+    --policy_checkpoint_path=tiny-diff \
+    --policy_action_horizon=1 \
+    --device=cuda \
+    --enable_cameras
+
+# Regression — same script with the in-tree gym id
+python scripts/rollout.py \
+    --task LeIsaac-HCIS-CupStacking-SingleArm-v0 \
+    --policy_type=lerobot-diffusion \
+    --policy_checkpoint_path=tiny-diff \
+    --policy_action_horizon=1 \
+    --device=cuda \
+    --enable_cameras
+```
+
+The external invocation logs `Parsing configuration from:
+_aicapstone_external_task_<hex>:PrivateCupStackingSmokeEnvCfg`; the gym-id
+invocation logs `Parsing configuration from:
+simulator.tasks.cup_stacking.cup_stacking_env_cfg:CupStackingEnvCfg`. Beyond
+that loader-prefix difference the two runs follow identical code paths.
+
+### 4.2 Constraints
+
+- The external file must not be imported before
+  `simulation_app = AppLauncher(...).app` finishes booting — it pulls in
+  `isaaclab.*`. `scripts/rollout.py` already orders the import correctly.
+- The synthetic module name `_aicapstone_external_task_<hex>` is inserted
+  into `sys.modules` before `exec_module`, so `parse_env_cfg` can resolve
+  `f"{__name__}:<Class>"` back through `importlib.import_module`.
+- Repeated `resolve_task` calls on the same absolute path within one process
+  short-circuit through `_FILE_LOAD_CACHE` and skip re-registering.
+- Asset paths inside the external file should use `simulator.ASSETS_ROOT`
+  for shared USDs and absolute paths for any private USDs.
+
+---
+
 ## See also
 
 - [`isaaclab_leisaac_tutorial.md`](./isaaclab_leisaac_tutorial.md) — full walkthrough of the task config tree, the `SingleArmFrankaTaskEnvCfg` template, the cup-stacking reference task, gym registration, and common pitfalls.
 - `packages/simulator/src/simulator/tasks/cup_stacking/` — the canonical example of a fully-exported standalone task config.
 - `packages/simulator/src/simulator/tasks/template/single_arm_franka_cfg.py` — the base class your standalone config should subclass.
+- `packages/simulator/src/simulator/tasks/external.py` — `resolve_task` loader for the three `--task` forms.

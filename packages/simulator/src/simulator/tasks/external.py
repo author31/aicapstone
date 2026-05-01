@@ -1,17 +1,16 @@
-"""Smart ``--task`` resolver supporting gym id, ``.py`` path, or ``module:Class`` refs.
+"""Smart ``--task`` resolver for rollout / eval scripts.
 
-The resolver lets callers point ``--task`` at:
+Accepts three input forms and returns a registered ``gymnasium`` task id:
 
-* an existing gym id (the in-tree contract);
-* a path to a ``.py`` file that calls ``gym.register(...)`` at import time
-  (private/external eval scenarios that must not be checked into the public
-  repo);
-* a ``module:Class`` reference for tasks shipped as installed packages.
+1. A gym id already present in ``gym.registry`` (returned unchanged).
+2. A path to a ``.py`` file that performs ``gym.register`` at import time.
+3. A ``module:Class`` reference whose import side-effect registers the task,
+   or whose ``module:Class`` string equals an existing task's
+   ``env_cfg_entry_point``.
 
-The loader is intentionally side-effect light: it never imports IsaacLab and
-expects ``AppLauncher`` to have been booted before it is called only because
-the *user file* may import ``isaaclab.*`` symbols at the top level.
+See ``AUT-80`` for the design rationale.
 """
+
 from __future__ import annotations
 
 import importlib
@@ -22,114 +21,137 @@ from pathlib import Path
 
 import gymnasium as gym
 
+__all__ = ["resolve_task"]
 
-_LOADED_FILES: dict[str, str] = {}
+# Maps absolute file path -> gym id, so repeated loads of the same .py
+# file in one process do not re-execute the module or re-register.
+_FILE_LOAD_CACHE: dict[str, str] = {}
 
+_SKELETON_EXAMPLE = """\
+Example skeleton for an external task file:
 
-_REGISTER_SKELETON = (
-    "Expected the file to call `gym.register(...)`. Minimal example:\n"
-    "    import gymnasium as gym\n"
-    "    TASK_ID = 'Private-MyEval-v0'\n"
-    "    gym.register(\n"
-    "        id=TASK_ID,\n"
-    "        entry_point='isaaclab.envs:ManagerBasedRLEnv',\n"
-    "        kwargs={'env_cfg_entry_point': f'{__name__}:MyEvalEnvCfg'},\n"
-    "    )\n"
-)
+    import gymnasium as gym
+    from isaaclab.utils import configclass
+    from simulator.tasks.template.single_arm_franka_cfg import (
+        SingleArmFrankaTaskEnvCfg,
+    )
+
+    @configclass
+    class MyEvalEnvCfg(SingleArmFrankaTaskEnvCfg):
+        ...
+
+    TASK_ID = "Private-MyEval-SingleArm-v0"
+
+    gym.register(
+        id=TASK_ID,
+        entry_point="isaaclab.envs:ManagerBasedRLEnv",
+        disable_env_checker=True,
+        kwargs={"env_cfg_entry_point": f"{__name__}:MyEvalEnvCfg"},
+    )
+"""
 
 
 def resolve_task(spec: str) -> str:
     """Return a registered gym task id for ``spec``.
 
-    Accepted forms (auto-detected, in order):
-
-    1. Already-registered gym id — returned as-is.
-    2. Path to a ``.py`` file (``Path.is_file()`` and ``.py`` suffix) — imported
-       under a synthetic module name so ``gym.register`` runs, then the task id
-       is taken from ``module.TASK_ID`` or inferred from the single new
-       registry entry.
-    3. ``module:Class`` reference — module is imported (which is expected to
-       call ``gym.register``), then the registry is scanned for an entry whose
-       ``env_cfg_entry_point`` equals ``spec``.
+    Args:
+        spec: gym id, ``.py`` path, or ``module:Class`` reference.
 
     Raises:
-        ValueError: ``spec`` matches none of the three forms (e.g. unknown id,
-            non-existent ``.py`` path, or string with no colon).
-        RuntimeError: a ``.py`` file imported successfully but registered no
-            gym id (or registered multiple ids without declaring ``TASK_ID``),
-            or a ``module:Class`` ref imported but no matching id was found.
+        ValueError: ``spec`` does not match any supported form.
+        RuntimeError: the referenced file/module did not register a task.
     """
+    if not isinstance(spec, str) or not spec:
+        raise ValueError(f"--task spec must be a non-empty string, got {spec!r}")
+
     if spec in gym.registry:
         return spec
 
-    candidate = Path(spec).expanduser()
-    if candidate.suffix == ".py" and candidate.is_file():
-        return _load_from_file(candidate.resolve())
+    p = Path(spec).expanduser()
+    if p.suffix == ".py":
+        if not p.is_file():
+            raise ValueError(f"--task '{spec}' looks like a .py path but file does not exist")
+        return _load_from_file(p.resolve())
 
     if ":" in spec:
         return _load_from_module_ref(spec)
 
     raise ValueError(
-        f"--task '{spec}' is not a registered gym id, an existing .py path, "
-        f"or a module:Class reference"
+        f"--task '{spec}' is not a registered gym id, .py path, or module:Class ref"
     )
 
 
 def _load_from_file(path: Path) -> str:
     abs_path = str(path)
-    cached = _LOADED_FILES.get(abs_path)
-    if cached is not None:
+    cached = _FILE_LOAD_CACHE.get(abs_path)
+    if cached is not None and cached in gym.registry:
         return cached
 
-    pre_ids = set(gym.registry.keys())
+    pre = set(gym.registry.keys())
     parent = str(path.parent)
     if parent not in sys.path:
         sys.path.insert(0, parent)
 
     mod_name = f"_aicapstone_external_task_{uuid.uuid4().hex}"
-    file_spec = importlib.util.spec_from_file_location(mod_name, path)
-    if file_spec is None or file_spec.loader is None:
+    spec_obj = importlib.util.spec_from_file_location(mod_name, path)
+    if spec_obj is None or spec_obj.loader is None:
         raise RuntimeError(f"Could not build import spec for '{path}'")
 
-    module = importlib.util.module_from_spec(file_spec)
+    module = importlib.util.module_from_spec(spec_obj)
     sys.modules[mod_name] = module
     try:
-        file_spec.loader.exec_module(module)
+        spec_obj.loader.exec_module(module)
     except Exception:
         sys.modules.pop(mod_name, None)
         raise
 
     declared = getattr(module, "TASK_ID", None)
-    if isinstance(declared, str) and declared in gym.registry:
-        _LOADED_FILES[abs_path] = declared
+    new_ids = set(gym.registry.keys()) - pre
+
+    if declared is not None:
+        if declared not in gym.registry:
+            raise RuntimeError(
+                f"External file '{path}' declares TASK_ID={declared!r} but did not "
+                f"register it via gym.register"
+            )
+        _FILE_LOAD_CACHE[abs_path] = declared
         return declared
 
-    new_ids = set(gym.registry.keys()) - pre_ids
     if len(new_ids) == 1:
-        tid = next(iter(new_ids))
-        _LOADED_FILES[abs_path] = tid
-        return tid
+        task_id = next(iter(new_ids))
+        _FILE_LOAD_CACHE[abs_path] = task_id
+        return task_id
 
     if len(new_ids) > 1:
         raise RuntimeError(
-            f"External task file '{path}' registered multiple gym ids "
-            f"{sorted(new_ids)}. Declare `TASK_ID = '<id>'` to disambiguate."
+            f"External file '{path}' registered multiple gym ids {sorted(new_ids)}; "
+            f"declare TASK_ID in the file to disambiguate"
         )
 
     raise RuntimeError(
-        f"External task file '{path}' did not call `gym.register(...)`.\n"
-        + _REGISTER_SKELETON
+        f"External file '{path}' did not call gym.register (0 new ids registered) "
+        f"and has no TASK_ID attribute.\n\n{_SKELETON_EXAMPLE}"
     )
 
 
 def _load_from_module_ref(spec: str) -> str:
-    mod_path, _, cls_name = spec.partition(":")
-    if not mod_path or not cls_name:
+    if spec.count(":") != 1:
         raise ValueError(
-            f"--task '{spec}' is not a valid module:Class reference"
+            f"--task '{spec}' must contain exactly one ':' separating module and class"
         )
 
-    importlib.import_module(mod_path)
+    mod_path, cls_name = spec.split(":", 1)
+    if not mod_path or not cls_name:
+        raise ValueError(
+            f"--task '{spec}' must be of the form 'module.path:ClassName'"
+        )
+
+    try:
+        importlib.import_module(mod_path)
+    except ImportError as exc:
+        raise ValueError(
+            f"--task '{spec}' module '{mod_path}' could not be imported: {exc}"
+        ) from exc
 
     for tid, entry in gym.registry.items():
         kwargs = getattr(entry, "kwargs", None) or {}
@@ -137,7 +159,6 @@ def _load_from_module_ref(spec: str) -> str:
             return tid
 
     raise RuntimeError(
-        f"module:Class '{spec}' did not register a gym id with a matching "
-        f"`env_cfg_entry_point`. Make sure the module's import-time "
-        f"`gym.register(...)` sets `kwargs={{'env_cfg_entry_point': '{spec}'}}`."
+        f"module:Class '{spec}' did not register a gym id whose "
+        f"env_cfg_entry_point matches it"
     )
