@@ -1,6 +1,8 @@
 .PHONY: install install-dev test build-isaaclab launch-isaaclab check-isaaclab-gpu submodules submodules-pull
 IMAGE ?= leisaac-isaaclab:latest
 DOCKERFILE ?= Dockerfile
+GPU ?= all
+CONTAINER_NAME ?= isaaclab
 
 submodules:
 	git submodule update --init --recursive
@@ -20,37 +22,40 @@ test:
 build-isaaclab: submodules
 	docker build -f $(DOCKERFILE) -t $(IMAGE) .
 
+
 launch-isaaclab: build-isaaclab
 	@set -e; \
-	xhost +local:root >/dev/null; \
-	trap 'xhost -local:root >/dev/null' EXIT; \
+	xhost +local:root >/dev/null || true; \
+	trap 'xhost -local:root >/dev/null || true' EXIT; \
 	docker run --rm -it \
-		--name isaaclab \
-		--device nvidia.com/gpu=all \
+		--name $(CONTAINER_NAME) \
+		--gpus '"device=$(GPU)"' \
 		--net=host \
 		--ipc=host \
+		--ulimit memlock=-1 \
+		--ulimit stack=67108864 \
 		-v $(shell pwd):/workspace/aicapstone \
 		-v /workspace/aicapstone/.venv \
 		-v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+		-v /usr/share/vulkan/icd.d:/usr/share/vulkan/icd.d:ro \
+		-v /etc/vulkan/icd.d:/etc/vulkan/icd.d:ro \
 		-e DISPLAY=$$DISPLAY \
 		-e OMNI_KIT_ACCEPT_EULA=Y \
 		-e PRIVACY_CONSENT=Y \
 		-e QT_X11_NO_MITSHM=1 \
-		-e NVIDIA_VISIBLE_DEVICES=all \
+		-e NVIDIA_VISIBLE_DEVICES=$(GPU) \
 		-e NVIDIA_DRIVER_CAPABILITIES=graphics,display,utility,compute \
 		$(IMAGE) \
-		bash -lc ' \
+		bash -lc '\
 			set -e; \
 			echo "== GPU check =="; \
 			nvidia-smi || true; \
 			echo "== Vulkan ICD candidates =="; \
-			ls -l /etc/vulkan/icd.d /usr/share/vulkan/icd.d 2>/dev/null || true; \
+			ls -l /usr/share/vulkan/icd.d /etc/vulkan/icd.d 2>/dev/null || true; \
 			unset VK_ICD_FILENAMES; \
 			for icd in \
 				/usr/share/vulkan/icd.d/nvidia_icd.json \
-				/etc/vulkan/icd.d/nvidia_icd.json \
-				/usr/share/vulkan/icd.d/nvidia_layers.json \
-				/etc/vulkan/icd.d/nvidia_layers.json; do \
+				/etc/vulkan/icd.d/nvidia_icd.json; do \
 				if [ -f "$$icd" ]; then \
 					export VK_ICD_FILENAMES="$$icd"; \
 					echo "Using Vulkan ICD: $$VK_ICD_FILENAMES"; \
@@ -58,12 +63,12 @@ launch-isaaclab: build-isaaclab
 				fi; \
 			done; \
 			if [ -z "$${VK_ICD_FILENAMES:-}" ]; then \
-				echo "No NVIDIA Vulkan ICD JSON found in container."; \
-				echo "Check host nvidia-container-toolkit installation."; \
+				echo "WARNING: No NVIDIA Vulkan ICD found."; \
+				echo "Check nvidia-container-toolkit / driver installation."; \
 			fi; \
-			for lib in libGLU.so.1 libXt.so.6; do \
+			for lib in libGLU.so.1 libXt.so.6 libX11.so.6 libvulkan.so.1; do \
 				if ! ldconfig -p | grep -q "$$lib"; then \
-					echo "$$lib is missing from the image." >&2; \
+					echo "Missing $$lib in image." >&2; \
 					exit 1; \
 				fi; \
 			done; \

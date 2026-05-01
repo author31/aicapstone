@@ -48,98 +48,190 @@ class ObjectPoseConfig:
     object_pitch: float = 0.0
 
 
-def load_object_poses(path: str | Path, config: ObjectPoseConfig) -> dict[str, WorldPose]:
-    """Read ``object_poses.json`` and return ``{object_name: (pos_xyz, quat_wxyz)}``.
+def load_episode_poses(
+    path: str | Path,
+    config: ObjectPoseConfig,
+) -> list[dict[str, WorldPose]]:
+    """Parse the per-episode UMI ``object_poses.json`` schema.
 
-    JSON schema::
+    The UMI ``frame_to_pose`` service emits a list where each entry holds the
+    anchor-frame pose of every detected object for one episode::
 
-        {
-            "anchor_tag_id": <int>,
-            "objects": [
-                {"tag_id": <int>, "x": <float>, "y": <float>, "yaw": <float>},
-                ...
-            ]
-        }
+        [
+            {
+                "video_name": str,
+                "episode_range": [start, end],
+                "objects": [
+                    {"object_name": str, "rvec": [rx, ry, rz], "tvec": [tx, ty, tz]},
+                    ...
+                ],
+                "status": "full" | "partial" | "none",
+            },
+            ...
+        ]
 
-    ``x``/``y``/``yaw`` are expressed in the anchor frame (meters / radians).
-    The anchor entry itself may appear in ``objects`` and is silently skipped.
+    Returns one ``{object_name: (pos_xyz, quat_wxyz)}`` dict per kept episode.
+
+    Behavior:
+        - Entries with ``status != "full"`` are skipped.
+        - For each kept entry, the anchor-frame ``tvec[0]``/``tvec[1]`` are mapped
+          to world via ``config.anchor_world_pose``; ``z`` is fixed to
+          ``config.object_z`` (``tvec[2]`` is ignored). Yaw is extracted from
+          ``rvec`` (axis-angle) and combined with ``config.anchor_world_pose[2]``;
+          ``config.object_roll``/``config.object_pitch`` are applied as fixed
+          world-frame roll/pitch.
+        - Object names must appear in ``set(config.tag_to_object.values())``;
+          unknown names raise ``ObjectPosesError``. Each kept episode must
+          contain every required object name.
 
     Raises:
-        ObjectPosesError: If the file is missing, malformed, the anchor tag id
-            disagrees with ``config.anchor_tag_id``, an object tag has no
-            mapping in ``config.tag_to_object``, or any required mapped tag is
-            absent from the JSON.
+        ObjectPosesError: For missing files, malformed JSON, unknown object
+            names, or kept episodes missing required objects.
     """
     json_path = Path(path)
-    data = _read_json(json_path)
-    _validate_anchor(json_path, data, config.anchor_tag_id)
-
-    objects = data.get("objects")
-    if not isinstance(objects, list):
+    data = _read_json_any(json_path)
+    if not isinstance(data, list):
         raise ObjectPosesError(
-            f"{json_path}: 'objects' must be a list, got {type(objects).__name__}"
+            f"{json_path}: expected top-level JSON list, got {type(data).__name__}"
         )
 
+    expected_names = set(config.tag_to_object.values())
     anchor_x, anchor_y, anchor_yaw = config.anchor_world_pose
     cos_a = math.cos(anchor_yaw)
     sin_a = math.sin(anchor_yaw)
 
-    result: dict[str, WorldPose] = {}
-    seen_tags: set[int] = set()
-
-    for idx, entry in enumerate(objects):
-        tag_id, x_a, y_a, yaw_a = _parse_object_entry(json_path, idx, entry)
-
-        if tag_id in seen_tags:
+    episodes: list[dict[str, WorldPose]] = []
+    for ep_idx, entry in enumerate(data):
+        if not isinstance(entry, dict):
             raise ObjectPosesError(
-                f"{json_path}: duplicate tag_id {tag_id} in objects (index {idx})"
+                f"{json_path}: episodes[{ep_idx}] must be a mapping, got {type(entry).__name__}"
             )
-        seen_tags.add(tag_id)
-
-        if tag_id == config.anchor_tag_id:
+        status = entry.get("status")
+        if status != "full":
             continue
 
-        if tag_id not in config.tag_to_object:
+        objects = entry.get("objects")
+        if not isinstance(objects, list):
             raise ObjectPosesError(
-                f"{json_path}: objects[{idx}] tag_id {tag_id} has no mapping in task "
-                f"config (known tags: {sorted(config.tag_to_object)})"
+                f"{json_path}: episodes[{ep_idx}] 'objects' must be a list, "
+                f"got {type(objects).__name__}"
             )
 
-        x_w = anchor_x + cos_a * x_a - sin_a * y_a
-        y_w = anchor_y + sin_a * x_a + cos_a * y_a
-        yaw_w = anchor_yaw + yaw_a
+        episode_poses: dict[str, WorldPose] = {}
+        for obj_idx, obj in enumerate(objects):
+            name, rvec, tvec = _parse_episode_object(json_path, ep_idx, obj_idx, obj)
+            if name not in expected_names:
+                raise ObjectPosesError(
+                    f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}] object_name "
+                    f"{name!r} is not in task config (known names: {sorted(expected_names)})"
+                )
+            if name in episode_poses:
+                raise ObjectPosesError(
+                    f"{json_path}: episodes[{ep_idx}] duplicate object_name {name!r}"
+                )
 
-        pos = (x_w, y_w, float(config.object_z))
-        quat = _euler_xyz_to_quat_wxyz(
-            float(config.object_roll), float(config.object_pitch), yaw_w
-        )
-        result[config.tag_to_object[tag_id]] = (pos, quat)
+            x_a, y_a = tvec[0], tvec[1]
+            yaw_a = _rotvec_to_yaw(rvec)
 
-    expected = set(config.tag_to_object)
-    missing = expected - seen_tags
-    if missing:
+            x_w = anchor_x + cos_a * x_a - sin_a * y_a
+            y_w = anchor_y + sin_a * x_a + cos_a * y_a
+            yaw_w = anchor_yaw + yaw_a
+
+            pos = (x_w, y_w, float(config.object_z))
+            quat = _euler_xyz_to_quat_wxyz(
+                float(config.object_roll), float(config.object_pitch), yaw_w
+            )
+            episode_poses[name] = (pos, quat)
+
+        missing = expected_names - set(episode_poses)
+        if missing:
+            raise ObjectPosesError(
+                f"{json_path}: episodes[{ep_idx}] missing required object name(s) "
+                f"{sorted(missing)}"
+            )
+        episodes.append(episode_poses)
+
+    return episodes
+
+
+def _parse_episode_object(
+    json_path: Path, ep_idx: int, obj_idx: int, obj: object
+) -> tuple[str, tuple[float, float, float], tuple[float, float, float]]:
+    if not isinstance(obj, dict):
         raise ObjectPosesError(
-            f"{json_path}: object_poses.json is missing required tag(s) {sorted(missing)} "
-            f"(task config maps tags {sorted(expected)} -> "
-            f"{[config.tag_to_object[t] for t in sorted(expected)]})"
+            f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}] must be a mapping, "
+            f"got {type(obj).__name__}"
         )
+    for required in ("object_name", "rvec", "tvec"):
+        if required not in obj:
+            raise ObjectPosesError(
+                f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}] missing field {required!r}"
+            )
+    name = obj["object_name"]
+    if not isinstance(name, str):
+        raise ObjectPosesError(
+            f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}] object_name must be str, "
+            f"got {type(name).__name__}"
+        )
+    rvec = _parse_vec3(json_path, ep_idx, obj_idx, "rvec", obj["rvec"])
+    tvec = _parse_vec3(json_path, ep_idx, obj_idx, "tvec", obj["tvec"])
+    return name, rvec, tvec
 
-    return result
+
+def _parse_vec3(
+    json_path: Path, ep_idx: int, obj_idx: int, field: str, value: object
+) -> tuple[float, float, float]:
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        raise ObjectPosesError(
+            f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}].{field} must be a "
+            f"length-3 list of numbers"
+        )
+    try:
+        return (float(value[0]), float(value[1]), float(value[2]))
+    except (TypeError, ValueError) as e:
+        raise ObjectPosesError(
+            f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}].{field} must be numeric ({e})"
+        ) from e
 
 
-def _read_json(json_path: Path) -> dict:
+def _rotvec_to_yaw(rvec: tuple[float, float, float]) -> float:
+    """Axis-angle rotation vector → yaw (rotation about world z), in radians.
+
+    Reproduces ``cv2.Rodrigues`` then ``atan2(R[1, 0], R[0, 0])`` without
+    requiring numpy / cv2 — keeps this loader dependency-free per the module
+    docstring.
+    """
+    rx, ry, rz = rvec
+    theta = math.sqrt(rx * rx + ry * ry + rz * rz)
+    if theta < 1e-12:
+        return 0.0
+    kx = rx / theta
+    ky = ry / theta
+    kz = rz / theta
+    c = math.cos(theta)
+    s = math.sin(theta)
+    one_minus_c = 1.0 - c
+    # Rodrigues: R = I + sin(θ)·K + (1 − cos(θ))·K²
+    r00 = c + kx * kx * one_minus_c
+    r10 = ky * kx * one_minus_c + kz * s
+    return math.atan2(r10, r00)
+
+
+def _read_json_any(json_path: Path) -> object:
     try:
         raw = json_path.read_text()
     except FileNotFoundError as e:
         raise ObjectPosesError(f"object_poses.json not found at {json_path}") from e
     except OSError as e:
         raise ObjectPosesError(f"Failed to read object_poses.json at {json_path}: {e}") from e
-
     try:
-        data = json.loads(raw)
+        return json.loads(raw)
     except json.JSONDecodeError as e:
         raise ObjectPosesError(f"Invalid JSON in {json_path}: {e}") from e
 
+
+def _read_json(json_path: Path) -> dict:
+    data = _read_json_any(json_path)
     if not isinstance(data, dict):
         raise ObjectPosesError(
             f"{json_path}: expected top-level JSON object, got {type(data).__name__}"

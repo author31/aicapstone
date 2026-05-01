@@ -92,7 +92,7 @@ Isaac Lab submodule must be initialized before build — `Dockerfile` fails fast
 
 1. **Define task.** Task configs in `packages/simulator/`.
 2. **Keyboard teleoperation.** Run `scripts/environments/teleoperation/teleop_se3_agent.py` with task ID, device, num envs.
-3. **FSM planner datagen.** Run `scripts/datagen/state_machine/generate.py` with task, num demos, recorder flags, target dataset repo ID.
+3. **FSM planner datagen.** Run `scripts/datagen/generate.py` with task, recorder flags, target dataset repo ID, and `--object_poses <path>` pointing to a per-episode UMI `object_poses.json` (the schema produced by the UMI `frame_to_pose` service). Episode count is driven by that file: each entry with `status == "full"` yields one replayed episode — there is no `--num_demos` flag.
 
 #### LeRobot & Hugging Face Hub workflow
 
@@ -108,6 +108,8 @@ Quick workflow:
 4. **Train (multi-GPU, host).** `accelerate launch --multi_gpu --num_processes=N $(which lerobot-train) <args>`.
 5. **Upload checkpoints.** `hf upload <model-repo> <local-ckpt-dir> --revision <tag>`.
 6. **Download checkpoints (back into the container for rollout).** `hf download <model-repo> --local-dir <dir> --revision <tag>`.
+
+Inspect uploaded datasets in the browser via the [LeRobot dataset visualizer](docs/lerobot_dataset_visualizer.md) — load by `repo_id` to spot-check episodes, action traces, and camera framing before training.
 
 ## Rollout (run inside the container)
 

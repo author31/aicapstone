@@ -21,6 +21,7 @@ from leisaac.enhance.datasets.lerobot_dataset_handler import LeRobotDatasetCfg
 
 from simulator.assets.robots.franka import FRANKA_PANDA_CFG
 from simulator import FRANKA_JOINT_NAMES
+from simulator.utils.object_poses_loader import ObjectPoseConfig
 
 from . import mdp
 
@@ -158,7 +159,7 @@ class SingleArmFrankaTaskEnvCfg(ManagerBasedRLEnvCfg):
     terminations: SingleArmFrankaTerminationsCfg = MISSING
     recorders: RecordTerm = RecordTerm()
     dynamic_reset_gripper_effort_limit: bool = True
-    object_poses_path: str | None = None
+    object_pose_cfg: ObjectPoseConfig | None = None
     robot_name: str = "franka_panda"
     default_feature_joint_names: list[str] = MISSING
     task_description: str = MISSING
