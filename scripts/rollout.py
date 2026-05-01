@@ -106,6 +106,7 @@ from leisaac.utils.robot_utils import (
 )
 
 import leisaac  # noqa: F401
+import simulator.tasks  # noqa: F401
 
 
 def setup_dual_viewports():
