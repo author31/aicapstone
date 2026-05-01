@@ -91,7 +91,7 @@ Isaac Lab submodule must be initialized before build — `Dockerfile` fails fast
 #### Usage (run inside the container)
 
 1. **Define task.** Task configs in `packages/simulator/`.
-2. **Keyboard teleoperation.** Run `scripts/environments/teleoperation/teleop_se3_agent.py` with task ID, device, num envs.
+2. **Keyboard teleoperation.** Run `scripts/teleop.py` with task ID, device, num envs.
 3. **FSM planner datagen.** Run `scripts/datagen/generate.py` with task, recorder flags, target dataset repo ID, and `--object_poses <path>` pointing to a per-episode UMI `object_poses.json` (the schema produced by the UMI `frame_to_pose` service). Episode count is driven by that file: each entry with `status == "full"` yields one replayed episode — there is no `--num_demos` flag.
 
 #### LeRobot & Hugging Face Hub workflow
