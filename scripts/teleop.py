@@ -80,6 +80,8 @@ simulation_app = app_launcher.app
 import os
 import time
 
+import simulator.tasks  # noqa: F401
+
 import gymnasium as gym
 import torch
 from isaaclab.envs import DirectRLEnv, ManagerBasedRLEnv
