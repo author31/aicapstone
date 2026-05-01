@@ -17,7 +17,9 @@ install-dev: submodules
 	uv sync --extra dev
 
 test:
-	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --extra dev pytest tests/test_repo_layout.py
+	PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --extra dev pytest \
+		tests/test_repo_layout.py \
+		tests/test_external_task_resolver.py
 
 build-isaaclab: submodules
 	docker build -f $(DOCKERFILE) -t $(IMAGE) .
