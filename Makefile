@@ -1,6 +1,8 @@
 .PHONY: install install-dev test build-isaaclab launch-isaaclab check-isaaclab-gpu submodules submodules-pull
 IMAGE ?= leisaac-isaaclab:latest
 DOCKERFILE ?= Dockerfile
+GPU ?= all
+CONTAINER_NAME ?= isaaclab
 
 submodules:
 	git submodule update --init --recursive
@@ -20,8 +22,6 @@ test:
 build-isaaclab: submodules
 	docker build -f $(DOCKERFILE) -t $(IMAGE) .
 
-GPU ?= all
-CONTAINER_NAME ?= isaaclab
 
 launch-isaaclab: build-isaaclab
 	@set -e; \
