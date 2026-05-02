@@ -1,27 +1,37 @@
 import copy
 import importlib
+import time
 from pathlib import Path
 from typing import Any, Dict
 from loguru import logger
 
 import yaml
 
+from .profiler import PipelineProfiler
 from .services.base_service import BaseService
 
 
 class PipelineExecutor:
     """Pipeline executor for UMI services."""
 
-    def __init__(self, config_path: str, session_dir_override: str | None = None, task_override: str | None = None):
+    def __init__(
+        self,
+        config_path: str,
+        session_dir_override: str | None = None,
+        task_override: str | None = None,
+        profiler: PipelineProfiler | None = None,
+    ):
         """Initialize the pipeline executor.
 
         Args:
             config_path: Path to the YAML configuration file
             session_dir_override: Optional override for session_dir in the config
+            profiler: Optional profiler that records per-stage runtime + video counts
         """
         self.config_path = Path(config_path)
         self.session_dir_override = session_dir_override
         self.task_override = task_override
+        self.profiler = profiler
         self.config: dict = {}
         self.services: dict = {}
 
@@ -285,22 +295,46 @@ class PipelineExecutor:
         logger.info(f"Starting pipeline execution with {len(stages)} stages")
         logger.info("Configuration propagation enabled - configs from previous stages will be passed forward")
 
-        for i, stage_name in enumerate(stages, 1):
-            stage_config = self.config[stage_name]
-            inherit_config = stage_config.get("inherit_config", True)
+        try:
+            for i, stage_name in enumerate(stages, 1):
+                stage_config = self.config[stage_name]
+                inherit_config = stage_config.get("inherit_config", True)
 
-            logger.info(f"Stage {i}/{len(stages)}: {stage_name} (inherit_config: {inherit_config})")
+                logger.info(f"Stage {i}/{len(stages)}: {stage_name} (inherit_config: {inherit_config})")
 
-            try:
                 # Load service with propagated configuration
                 service_instance = self.load_service(stage_name, propagated_config if inherit_config else {})
 
                 # Get the effective configuration used for this stage
                 stage_effective_config = service_instance.config
+                service_class = type(service_instance).__name__
 
-                # Execute the stage
-                result = service_instance.execute(*args, **kwargs)
-                results[stage_name] = result
+                stage_start_wall = time.time()
+                stage_t0 = time.perf_counter()
+                stage_result: Any = None
+                stage_error: str = ""
+                stage_status = "success"
+                try:
+                    stage_result = service_instance.execute(*args, **kwargs)
+                    results[stage_name] = stage_result
+                except Exception as e:
+                    stage_status = "failed"
+                    stage_error = f"{type(e).__name__}: {e}"
+                    logger.error(f"Pipeline failed at stage '{stage_name}': {e}")
+                    raise
+                finally:
+                    if self.profiler is not None:
+                        duration = time.perf_counter() - stage_t0
+                        self.profiler.record_stage(
+                            stage_index=i,
+                            stage_name=stage_name,
+                            service_class=service_class,
+                            result=stage_result,
+                            start_time=stage_start_wall,
+                            duration_sec=duration,
+                            status=stage_status,
+                            error=stage_error,
+                        )
 
                 logger.info(f"Stage {i}/{len(stages)}: {stage_name} completed")
 
@@ -310,10 +344,9 @@ class PipelineExecutor:
                     logger.info(f"Updated propagated configuration with {len(stage_effective_config)} keys")
                 else:
                     logger.info("Skipped configuration propagation for this stage")
-
-            except Exception as e:
-                logger.error(f"Pipeline failed at stage '{stage_name}': {e}")
-                raise
+        finally:
+            if self.profiler is not None:
+                self.profiler.finalize()
 
         logger.info("Pipeline execution completed successfully")
         return results

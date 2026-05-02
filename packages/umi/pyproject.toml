@@ -47,7 +47,9 @@ dependencies = [
     "imagecodecs>=2023.9.18",
     "loguru",
     "pandas>=2.2.2",
-    "scikit-fda"
+    "scikit-fda",
+
+    "lerobot==0.4.4"
 ]
 
 [project.urls]

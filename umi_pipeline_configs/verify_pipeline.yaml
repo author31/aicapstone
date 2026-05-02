@@ -1,9 +1,10 @@
+
 00_process_video:
   instance: "umi.services.video_organization.VideoOrganizationService"
   config:
-    session_dir: "/home/hcis-s17/author_workdir/voilab/0911_basement_test_normal_lens"
+    session_dir: "video"
     input_patterns: ["*.MP4", "*.mp4"]
-  
+
 01_extract_gopro_imu:
   instance: "umi.services.imu_extraction.IMUExtractionService"
   config:
@@ -17,17 +18,11 @@
     timeout_multiple: 16
     max_lost_frames: 60
     slam_process_mode: create_map
-    enable_gui: false
-
-03_batch_slam:
-  instance: "umi.services.slam_mapping.SLAMMappingService"
-  inherit_config: true
-  config:
-    docker_image: "chicheng/orb_slam3:latest"
-    timeout_multiple: 16
-    max_lost_frames: 60
-    slam_process_mode: batch_slam
-    enable_gui: false
+    slam_settings_file: "packages/umi/defaults/orb_slam3_settings/gopro13_fisheye_ratio_4-3_2-7k.yaml"
+    resolution: [2028, 2704]
+    mask_pts_json_path: "packages/umi/src/umi/asset/mask_4k.json"
+    enable_gui: true
+    gui_lenient_exit: true
 
 04_detect_aruco:
   instance: "umi.services.aruco_detection.ArucoDetectionService"
@@ -40,26 +35,18 @@
   instance: "umi.services.calibration.CalibrationService"
   inherit_config: true
   config:
-    video_resolution: [2704, 2028]
+    resolution: [2028, 2704]
     tag_id: 13
-    dist_to_center_threshold: 0.1
+    dist_to_center_threshold: 0.6
     nominal_z: 0.01
 
-06_generate_dataset_plan:
-  instance: "umi.services.dataset_planning.DatasetPlanningService"
+05b_verify_calibration:
+  instance: "umi.services.calibration_verification.CalibrationVerificationService"
   inherit_config: true
   config:
-    dataset_plan_filename: dataset_plan.pkl
-    nominal_z: 0.01
-
-07_generate_replay_buffer:
-  instance: "umi.services.replay_buffer.ReplayBufferService"
-  inherit_config: true
-  config:
-    output_filename: dataset.zarr.zip
-    output_resolution: [224, 224]
-    output_fov: null
-    output_fov_intrinsic_path: null
-    compression_level: 99
-    no_mirror: false
-    mirror_swap: false
+    min_valid_detections: 10
+    max_translation_norm_m: 5.0
+    max_condition_number: 1.0e6
+    min_gripper_width_m: 0.005
+    max_gripper_width_m: 0.5
+    min_tag_visibility_ratio: 0.05

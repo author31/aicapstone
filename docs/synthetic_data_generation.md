@@ -53,7 +53,7 @@ import gymnasium as gym
 
 
 gym.register(
-    id="LeIsaac-HCIS-CupStacking-SingleArm-v0",
+    id="HCIS-CupStacking-SingleArm-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
     kwargs={
@@ -72,7 +72,7 @@ Registration only fires on import. The **parent** package `packages/simulator/sr
 from . import cup_stacking  # noqa: F401
 ```
 
-Forgetting this line is the most common reason `--task LeIsaac-HCIS-CupStacking-SingleArm-v0` fails with "task is not registered" — the file exists, the gym call exists, but nothing imported it.
+Forgetting this line is the most common reason `--task HCIS-CupStacking-SingleArm-v0` fails with "task is not registered" — the file exists, the gym call exists, but nothing imported it.
 
 ---
 
@@ -134,7 +134,7 @@ from simulator.datagen.state_machine.cup_stacking import CupStackingStateMachine
 
 TASK_REGISTRY = {
     ...,
-    "LeIsaac-HCIS-CupStacking-SingleArm-v0": (CupStackingStateMachine, "keyboard"),
+    "HCIS-CupStacking-SingleArm-v0": (CupStackingStateMachine, "keyboard"),
 }
 ```
 
