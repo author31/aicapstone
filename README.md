@@ -118,7 +118,6 @@ python scripts/datagen/generate.py \
     --num_envs 1 \
     --device cuda \
     --enable_cameras \
-    --num_demos <number_of_demos> \
     --record \
     --use_lerobot_recorder \
     --lerobot_dataset_repo_id ${HF_USER}/<repo_id> \
