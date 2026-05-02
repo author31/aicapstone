@@ -67,12 +67,16 @@ from leisaac.enhance.managers import EnhanceDatasetExportMode, StreamingRecorder
 from leisaac.utils.env_utils import dynamic_reset_gripper_effort_limit_sim
 
 from simulator.datagen.state_machine.cup_stacking import CupStackingStateMachine
+from simulator.datagen.state_machine.cutlery_arrangement import CutleryArrangementStateMachine
+from simulator.datagen.state_machine.toy_blocks_collection import ToyBlocksCollectionStateMachine
 from simulator.utils.object_poses_loader import load_episode_poses
 
 # Maps gym task id → (StateMachineClass, device_type)
 TASK_REGISTRY = {
     "LeIsaac-SO101-PickOrange-v0": (PickOrangeStateMachine, "so101_state_machine"),
     "HCIS-CupStacking-SingleArm-v0": (CupStackingStateMachine, "keyboard"),
+    "HCIS-ToyBlocksCollection-SingleArm-v0": (ToyBlocksCollectionStateMachine, "keyboard"),
+    "HCIS-CutleryArrangement-SingleArm-v0": (CutleryArrangementStateMachine, "keyboard"),
 }
 
 
