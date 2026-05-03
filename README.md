@@ -1,5 +1,12 @@
 # AI Capstone
 
+Sim-to-real imitation-learning pipeline for robot manipulation tasks. Record human demonstrations with UMI, process them through SLAM, generate synthetic data in Isaac Lab, train a diffusion policy with LeRobot, and evaluate it in simulation.
+
+For a complete step-by-step walkthrough, see [Getting Started](docs/getting_started.md).
+
+> **No local GPU?** Training and simulation require a Linux machine with an Nvidia GPU.
+> See [Cloud GPU Setup with GlowsAI](TODO_GLOWSAI_URL) for instructions on using cloud GPU instances.
+
 # Human Demonstration Data Processing
 
 1. **Installation**
@@ -130,16 +137,24 @@ Upload the recorded dataset to Hugging Face Hub:
 hf upload ${HF_USER}/<repo_id> ~/.cache/huggingface/lerobot/${HF_USER}/<repo_id>/
 ```
 
-# LeRobot training
-see [LeRobot Training Procedure](/docs/lerobot_training.md).
+# LeRobot Training
 
-# LeRobot rollout
-see [LeRobot Rollout Procedure](/docs/lerobot_rollout.md).
+Training runs on the **host machine** (not inside Docker) and produces a policy checkpoint from your generated dataset. Requires an Nvidia GPU.
+
+See [LeRobot Training Procedure](docs/lerobot_training.md) for the full command reference, multi-GPU setup, and troubleshooting.
+
+# LeRobot Rollout
+
+Rollout loads your trained policy into the Isaac Lab simulator (inside the Docker container) to evaluate robot performance.
+
+See [LeRobot Rollout (Policy Evaluation)](docs/lerobot_rollout.md) for the full procedure.
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [Getting Started](docs/getting_started.md) | End-to-end pipeline walkthrough |
+| [Developer Introduction](docs/dev/introduction.md) | Repo layout, environment setup, where to run what |
 | [Isaac Lab + LeIsaac Configuration Tutorial](docs/isaaclab_leisaac_tutorial.md) | Configuring Isaac Lab with LeIsaac |
 | [LeRobot Dataset Visualizer](docs/lerobot_dataset_visualizer.md) | Visualizing LeRobot datasets |
 | [LeRobot Checkpoint Format](docs/lerobot_model_format.md) | Understanding LeRobot model checkpoint structure |
