@@ -185,6 +185,8 @@ def _replace_recorder_manager(env, env_cfg, args_cli):
 
 def _apply_episode_poses(env, poses):
     """Write per-object root poses for the current episode into the sim."""
+    import math as _math
+
     device = env.device
     for name, (pos, quat) in poses.items():
         obj = env.scene[name]
@@ -194,6 +196,29 @@ def _apply_episode_poses(env, poses):
             dtype=torch.float32,
         ).repeat(env.num_envs, 1)
         obj.write_root_pose_to_sim(pose_tensor)
+        w, x, y, z = quat
+        yaw_deg = _math.degrees(_math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
+        print(
+            f"  [pose] {name}: pos=({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}) "
+            f"yaw={yaw_deg:+6.1f}°"
+        )
+
+
+# z below which a task object is considered to have fallen off the table.
+# Objects sit at object_z ≈ 0.05; anything under the table surface trips this.
+_FALL_THRESHOLD_Z: float = 0.0
+
+
+def _any_object_fell(env, object_names, z_threshold: float) -> bool:
+    """Return True if any named scene object has root_pos_w.z below z_threshold."""
+    for name in object_names:
+        try:
+            obj = env.scene[name]
+        except KeyError:
+            continue
+        if torch.any(obj.data.root_pos_w[:, 2] < z_threshold).item():
+            return True
+    return False
 
 
 def _on_episode_done(
@@ -312,6 +337,8 @@ def main():
     env.reset()
     sm.reset()
 
+    fall_check_object_names = tuple(getattr(sm, "task_object_names", ()))
+
     resume_recorded_demo_count = 0
     if args_cli.record and args_cli.resume:
         resume_recorded_demo_count = env.recorder_manager._dataset_file_handler.get_num_episodes()
@@ -372,6 +399,15 @@ def main():
                     actions = sm.get_action(env)
                     env.step(actions)
                     sm.advance()
+
+                    if fall_check_object_names and _any_object_fell(
+                        env, fall_check_object_names, _FALL_THRESHOLD_Z
+                    ):
+                        print(
+                            "[INFO] Task object fell off the table; aborting this "
+                            "episode and skipping to next."
+                        )
+                        sm._episode_done = True
 
                 if rate_limiter:
                     rate_limiter.sleep(env)

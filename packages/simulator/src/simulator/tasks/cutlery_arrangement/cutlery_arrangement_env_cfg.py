@@ -23,12 +23,28 @@ from simulator.tasks.template.single_arm_franka_cfg import (
 
 DINING_OBJECTS_ROOT = ASSETS_ROOT / "scenes" / "dining_room" / "objects"
 
-TAG_TO_OBJECT: dict[int, str] = {1: "plate", 2: "knife", 3: "fork"}
+TAG_TO_OBJECT: dict[int, str] = {2: "knife", 3: "fork"}
 ANCHOR_TAG_ID: int = 0
-ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.5, -0.2, 0.0)
+# Anchor for fork/knife spawns; placed away from the fixed plate so the cutlery
+# starts well clear of the plate area.
+ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.40, 0.10, 0.0)
 OBJECT_Z: float = 0.05
 OBJECT_ROLL: float = 0.0
 OBJECT_PITCH: float = 0.0
+# Per-USD yaw correction (rad) so the spawned object matches its visual heading
+# under the gripper's coordinate convention. Tune once per USD by viewing the
+# spawned object and the printed yaw side-by-side.
+PER_OBJECT_YAW_OFFSET: dict[str, float] = {
+    "knife": math.pi,
+    "fork": 2.0 * math.pi,
+}
+# Plate is spawned at a fixed position (see RigidObjectCfg below) and not
+# loaded from object_poses.json; the JSON entry is silently skipped.
+IGNORED_OBJECT_NAMES: tuple[str, ...] = ("plate",)
+# Fixed plate world position. Robot is at (0.35, -0.74); plate sits in front of
+# it with ≥ 10 cm of free space on both ±y sides for fork (left) and knife
+# (right) drop targets (state machine uses `_PLACE_Y_OFFSET = 0.10`).
+PLATE_WORLD_POS: tuple[float, float, float] = (0.50, -0.40, 0.05)
 
 
 @configclass
@@ -39,6 +55,10 @@ class CutleryArrangementSceneCfg(SingleArmFrankaTaskSceneCfg):
 
     plate: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Scene/plate",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=PLATE_WORLD_POS,
+            rot=(1.0, 0.0, 0.0, 0.0),
+        ),
         spawn=sim_utils.UsdFileCfg(
             usd_path=str(DINING_OBJECTS_ROOT / "Plate" / "plate.usd"),
             mass_props=MassPropertiesCfg(mass=0.1),
@@ -86,8 +106,8 @@ def cutlery_arranged(
     done = torch.logical_and(done, fork_dist_xy <= max_dist_xy)
     done = torch.logical_and(done, knife_dist_xy <= max_dist_xy)
 
-    fork_on_left = fork_pos[:, 1] > plate_pos[:, 1]
-    knife_on_right = knife_pos[:, 1] < plate_pos[:, 1]
+    fork_on_left = fork_pos[:, 0] > plate_pos[:, 0]
+    knife_on_right = knife_pos[:, 0] < plate_pos[:, 0]
 
     done = torch.logical_and(done, fork_on_left)
     done = torch.logical_and(done, knife_on_right)
@@ -149,4 +169,7 @@ class CutleryArrangementEnvCfg(SingleArmFrankaTaskEnvCfg):
             object_z=OBJECT_Z,
             object_roll=OBJECT_ROLL,
             object_pitch=OBJECT_PITCH,
+            per_object_yaw_offset=PER_OBJECT_YAW_OFFSET,
+            use_fixed_yaw=True,
+            ignored_object_names=IGNORED_OBJECT_NAMES,
         )

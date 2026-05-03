@@ -47,8 +47,20 @@ _RELEASE_Z_OFFSET = 0.09
 _GRIPPER_DOWN_ROLL_W = math.pi
 _GRIPPER_DOWN_PITCH_W = 0.0
 _GRIPPER_DOWN_YAW_OFFSET_RANGE = (-0.15, 0.15)
+# Grasp yaw bias (rad) on top of the object's world yaw, before the random
+# jitter. Cutlery items are elongated, so π/2 closes the fingers across the
+# short axis. Per-USD orientation correction lives in env_cfg's
+# ``per_object_yaw_offset``.
+_GRASP_YAW_OFFSET: float = math.pi / 2.0
+# Horizontal retreat (m) toward the robot base applied to approach + grasp
+# targets. Per-object so each cutlery item can be tuned independently
+# (e.g. knife may grab better with no retreat than fork).
+_GRASP_RETREAT_PER_OBJECT: dict[str, float] = {
+    "fork": 0.025,
+    "knife": 0.025,
+}
 
-_PLACE_Y_OFFSET = 0.10
+_PLACE_OFFSET = 0.10
 
 _SUCCESS_MAX_DIST_XY = 0.15
 
@@ -66,9 +78,9 @@ _FRANKA_REST_JOINT_POS = {
 
 # Pick order: fork first (place on +y / left of plate), then knife (place on -y / right)
 _PICK_ORDER = (_FORK_NAME, _KNIFE_NAME)
-_PLACE_Y_SIGNS = (+1.0, -1.0)  # fork → +y, knife → -y
+_PLACE_X_SIGNS = (+1.0, -1.0)  # fork → +x of plate, knife → -x of plate
 
-_PHASE_DURATIONS_PER_OBJECT = (160, 80, 20, 100, 85, 35, 30)
+_PHASE_DURATIONS_PER_OBJECT = (180, 130, 20, 160, 170, 15, 30)
 _PHASES_PER_OBJECT = len(_PHASE_DURATIONS_PER_OBJECT)
 
 
@@ -84,6 +96,27 @@ def _clamp_delta(delta: torch.Tensor, max_norm: float = _MAX_CARTESIAN_DELTA) ->
 
 def _shortest_quat(quat: torch.Tensor) -> torch.Tensor:
     return torch.where(quat[:, 0:1] < 0.0, -quat, quat)
+
+
+def _retreat_xy_toward(
+    target_pos_w: torch.Tensor,
+    anchor_pos_w: torch.Tensor,
+    distance: float,
+) -> torch.Tensor:
+    """Pull ``target_pos_w`` xy toward ``anchor_pos_w`` by ``distance`` metres."""
+    out = target_pos_w.clone()
+    delta_xy = out[:, :2] - anchor_pos_w[:, :2]
+    norm = torch.linalg.norm(delta_xy, dim=-1, keepdim=True).clamp_min(1e-6)
+    out[:, :2] -= distance * (delta_xy / norm)
+    return out
+
+
+def _yaw_from_quat_wxyz(quat_wxyz: torch.Tensor) -> torch.Tensor:
+    """Yaw (rotation about world z) from a (w, x, y, z) quaternion."""
+    w, x, y, z = quat_wxyz[:, 0], quat_wxyz[:, 1], quat_wxyz[:, 2], quat_wxyz[:, 3]
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return torch.atan2(siny_cosp, cosy_cosp)
 
 
 def _find_body_index(robot, body_name: str) -> int:
@@ -188,8 +221,8 @@ class CutleryArrangementStateMachine(StateMachineBase):
 
         done = torch.logical_and(done, fork_dist_xy <= _SUCCESS_MAX_DIST_XY)
         done = torch.logical_and(done, knife_dist_xy <= _SUCCESS_MAX_DIST_XY)
-        done = torch.logical_and(done, fork_pos[:, 1] > plate_pos[:, 1])
-        done = torch.logical_and(done, knife_pos[:, 1] < plate_pos[:, 1])
+        done = torch.logical_and(done, fork_pos[:, 0] > plate_pos[:, 0])
+        done = torch.logical_and(done, knife_pos[:, 0] < plate_pos[:, 0])
 
         return bool(done.all().item())
 
@@ -204,26 +237,40 @@ class CutleryArrangementStateMachine(StateMachineBase):
         num_envs = env.num_envs
 
         obj_name = _PICK_ORDER[self._current_object_idx]
-        y_sign = _PLACE_Y_SIGNS[self._current_object_idx]
+        x_sign = _PLACE_X_SIGNS[self._current_object_idx]
         obj_pos_w = env.scene[obj_name].data.root_pos_w.clone()
+        obj_quat_w = env.scene[obj_name].data.root_quat_w.clone()
         plate_pos_w = env.scene[_PLATE_NAME].data.root_pos_w.clone()
+        robot_root_pos_w = robot.data.root_pos_w.clone()
 
         place_target_w = plate_pos_w.clone()
-        place_target_w[:, 1] += y_sign * _PLACE_Y_OFFSET
+        place_target_w[:, 0] += x_sign * _PLACE_OFFSET
 
         if self._step_count == 0 and self._event == 0:
             self._initial_ee_pos_w = self._ee_pos_w(robot).clone()
 
         phase_in_cycle = self._event % _PHASES_PER_OBJECT
 
-        target_quat_w = self._gripper_down_quat_w(robot, num_envs, device, robot.data.root_quat_w.dtype)
+        target_quat_w = self._gripper_down_quat_w(
+            obj_quat_w,
+            num_envs,
+            device,
+            obj_quat_w.dtype,
+            yaw_offset=_GRASP_YAW_OFFSET,
+        )
+
+        grasp_anchor_w = _retreat_xy_toward(
+            obj_pos_w,
+            robot_root_pos_w,
+            _GRASP_RETREAT_PER_OBJECT.get(obj_name, 0.0),
+        )
 
         if phase_in_cycle == 0:
             target_pos_w, gripper_cmd = self._phase_move_above_object(obj_pos_w, num_envs, device)
         elif phase_in_cycle == 1:
-            target_pos_w, gripper_cmd = self._phase_approach_object(obj_pos_w, num_envs, device)
+            target_pos_w, gripper_cmd = self._phase_approach_object(grasp_anchor_w, num_envs, device)
         elif phase_in_cycle == 2:
-            target_pos_w, gripper_cmd = self._phase_grasp(obj_pos_w, num_envs, device)
+            target_pos_w, gripper_cmd = self._phase_grasp(grasp_anchor_w, num_envs, device)
         elif phase_in_cycle == 3:
             target_pos_w, gripper_cmd = self._phase_lift(obj_pos_w, num_envs, device)
         elif phase_in_cycle == 4:
@@ -254,7 +301,11 @@ class CutleryArrangementStateMachine(StateMachineBase):
         return target, _constant_gripper(num_envs, device, _GRIPPER_OPEN)
 
     def _phase_grasp(self, obj_pos_w, num_envs, device):
+        # Hold the same height as the approach phase so the EE doesn't keep
+        # descending while the fingers are closing — that timing race causes
+        # empty grasps.
         target = obj_pos_w.clone()
+        target[:, 2] += _GRASP_Z_OFFSET
         return target, _constant_gripper(num_envs, device, _GRIPPER_CLOSE)
 
     def _phase_lift(self, obj_pos_w, num_envs, device):
@@ -388,35 +439,27 @@ class CutleryArrangementStateMachine(StateMachineBase):
         return torch.clamp(joint_pos, arm_joint_pos_limits[..., 0], arm_joint_pos_limits[..., 1])
 
     def _gripper_down_quat_w(
-        self, robot, num_envs: int, device: torch.device, dtype: torch.dtype
+        self,
+        obj_quat_w: torch.Tensor,
+        num_envs: int,
+        device: torch.device,
+        dtype: torch.dtype,
+        yaw_offset: float = 0.0,
     ) -> torch.Tensor:
         if self._gripper_down_yaw_w is None or self._gripper_down_yaw_w.shape[0] != num_envs:
-            base_yaw = self._current_hand_heading_yaw_w(robot).to(device=device, dtype=dtype)
+            base_yaw = _yaw_from_quat_wxyz(obj_quat_w).to(device=device, dtype=dtype)
             self._gripper_down_yaw_offset_w = torch.empty(num_envs, device=device, dtype=dtype).uniform_(
                 _GRIPPER_DOWN_YAW_OFFSET_RANGE[0],
                 _GRIPPER_DOWN_YAW_OFFSET_RANGE[1],
             )
-            self._gripper_down_yaw_w = (base_yaw + self._gripper_down_yaw_offset_w).clone()
+            self._gripper_down_yaw_w = (
+                base_yaw + yaw_offset + self._gripper_down_yaw_offset_w
+            ).clone()
 
         roll = torch.full((num_envs,), _GRIPPER_DOWN_ROLL_W, device=device, dtype=dtype)
         pitch = torch.full((num_envs,), _GRIPPER_DOWN_PITCH_W, device=device, dtype=dtype)
         yaw = self._gripper_down_yaw_w.to(device=device, dtype=dtype)
         return quat_from_euler_xyz(roll, pitch, yaw)
-
-    def _current_hand_heading_yaw_w(self, robot) -> torch.Tensor:
-        quat_w = self._ee_quat_w(robot)
-        local_x = torch.zeros(quat_w.shape[0], 3, device=quat_w.device, dtype=quat_w.dtype)
-        local_y = torch.zeros_like(local_x)
-        local_x[:, 0] = 1.0
-        local_y[:, 1] = 1.0
-
-        hand_x_w = quat_apply(quat_w, local_x)
-        hand_y_w = quat_apply(quat_w, local_y)
-        yaw_from_x = torch.atan2(hand_x_w[:, 1], hand_x_w[:, 0])
-        yaw_from_y = torch.atan2(hand_y_w[:, 0], -hand_y_w[:, 1])
-
-        x_is_horizontal = torch.linalg.norm(hand_x_w[:, :2], dim=-1) > 1e-4
-        return torch.where(x_is_horizontal, yaw_from_x, yaw_from_y)
 
     # ------------------------------------------------------------------
     # Properties
@@ -429,3 +472,7 @@ class CutleryArrangementStateMachine(StateMachineBase):
     @property
     def step_count(self) -> int:
         return self._step_count
+
+    @property
+    def task_object_names(self) -> tuple[str, ...]:
+        return (_FORK_NAME, _KNIFE_NAME, _PLATE_NAME)

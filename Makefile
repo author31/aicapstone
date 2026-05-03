@@ -20,7 +20,8 @@ launch-isaaclab: build-isaaclab
 	trap 'xhost -local:root >/dev/null' EXIT; \
 	docker run --rm -it \
 		--name isaaclab \
-		--device nvidia.com/gpu=all \
+		--gpus all \
+		--runtime=nvidia \
 		--net=host \
 		--ipc=host \
 		-v $(shell pwd):/workspace/aicapstone \
