@@ -25,10 +25,18 @@ LIVING_OBJECTS_ROOT = ASSETS_ROOT / "scenes" / "living_room" / "objects"
 
 TAG_TO_OBJECT: dict[int, str] = {1: "green_block", 2: "blue_block", 3: "red_block"}
 ANCHOR_TAG_ID: int = 0
-ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.5, -0.2, 0.0)
+ANCHOR_WORLD_POSE: tuple[float, float, float] = (0.35, 0.0, 0.0)
 OBJECT_Z: float = 0.05
 OBJECT_ROLL: float = 0.0
 OBJECT_PITCH: float = 0.0
+# Per-USD yaw correction (rad) so the spawned object matches its visual heading
+# under the gripper's coordinate convention. Tag-to-mesh alignment differs per
+# asset; tune until ``data.root_quat_w`` matches what you see in the viewport.
+PER_OBJECT_YAW_OFFSET: dict[str, float] = {
+    "green_block": math.pi / 2.0,
+    "blue_block": math.pi / 2.0,
+    "red_block": math.pi / 2.0,
+}
 
 
 @configclass
@@ -64,7 +72,7 @@ class ToyBlocksCollectionSceneCfg(SingleArmFrankaTaskSceneCfg):
     storage_box: RigidObjectCfg = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/Scene/storage_box",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=(0.5, -0.2, 0.05),
+            pos=(0.65, -0.55, 0.05),
             rot=(1.0, 0.0, 0.0, 0.0),
         ),
         spawn=sim_utils.UsdFileCfg(
@@ -119,9 +127,9 @@ class TerminationsCfg(SingleArmFrankaTerminationsCfg):
             "blue_block_cfg": SceneEntityCfg("blue_block"),
             "red_block_cfg": SceneEntityCfg("red_block"),
             "storage_box_cfg": SceneEntityCfg("storage_box"),
-            "x_range": (-0.05, 0.05),
-            "y_range": (-0.05, 0.05),
-            "z_range": (-0.05, 0.05),
+            "x_range": (-0.12, 0.12),
+            "y_range": (-0.12, 0.12),
+            "z_range": (-0.08, 0.08),
         },
     )
 
@@ -165,4 +173,6 @@ class ToyBlocksCollectionEnvCfg(SingleArmFrankaTaskEnvCfg):
             object_z=OBJECT_Z,
             object_roll=OBJECT_ROLL,
             object_pitch=OBJECT_PITCH,
+            per_object_yaw_offset=PER_OBJECT_YAW_OFFSET,
+            use_fixed_yaw=True,
         )

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Mapping
 
@@ -38,6 +38,16 @@ class ObjectPoseConfig:
         object_z: Fixed world ``z`` height applied to every object.
         object_roll: Fixed world roll (radians) applied to every object.
         object_pitch: Fixed world pitch (radians) applied to every object.
+        per_object_yaw_offset: Per-asset yaw (rad). When ``use_fixed_yaw`` is
+            False, this is added to the detected world yaw to cancel each USD's
+            local-frame mismatch with the ArUco tag. When ``use_fixed_yaw`` is
+            True, the detected yaw is ignored entirely and this value is used
+            as the object's world yaw (relative to the anchor) — every episode
+            then spawns the object with the same orientation, so a single
+            gripper-yaw tuning works across the whole dataset.
+        use_fixed_yaw: If True, ignore the per-episode ``rvec`` and lock each
+            object's world yaw to ``anchor_yaw + per_object_yaw_offset[name]``.
+            Position still varies per episode; only the rotation is locked.
     """
 
     tag_to_object: Mapping[int, str]
@@ -46,6 +56,12 @@ class ObjectPoseConfig:
     object_z: float
     object_roll: float = 0.0
     object_pitch: float = 0.0
+    per_object_yaw_offset: Mapping[str, float] = field(default_factory=dict)
+    use_fixed_yaw: bool = False
+    # Names present in the JSON that should be silently skipped by the loader.
+    # Use this for objects detected by UMI that you want to spawn at a fixed
+    # ``RigidObjectCfg.init_state`` position instead of per-episode poses.
+    ignored_object_names: tuple[str, ...] = ()
 
 
 def load_episode_poses(
@@ -120,6 +136,8 @@ def load_episode_poses(
         episode_poses: dict[str, WorldPose] = {}
         for obj_idx, obj in enumerate(objects):
             name, rvec, tvec = _parse_episode_object(json_path, ep_idx, obj_idx, obj)
+            if name in config.ignored_object_names:
+                continue
             if name not in expected_names:
                 raise ObjectPosesError(
                     f"{json_path}: episodes[{ep_idx}].objects[{obj_idx}] object_name "
@@ -131,11 +149,14 @@ def load_episode_poses(
                 )
 
             x_a, y_a = tvec[0], tvec[1]
-            yaw_a = _rotvec_to_yaw(rvec)
 
             x_w = anchor_x + cos_a * x_a - sin_a * y_a
             y_w = anchor_y + sin_a * x_a + cos_a * y_a
-            yaw_w = anchor_yaw + yaw_a
+            per_object = float(config.per_object_yaw_offset.get(name, 0.0))
+            if config.use_fixed_yaw:
+                yaw_w = anchor_yaw + per_object
+            else:
+                yaw_w = anchor_yaw + _rotvec_to_yaw(rvec) + per_object
 
             pos = (x_w, y_w, float(config.object_z))
             quat = _euler_xyz_to_quat_wxyz(
