@@ -4,9 +4,6 @@ Sim-to-real imitation-learning pipeline for robot manipulation tasks. Record hum
 
 For a complete step-by-step walkthrough, see [Getting Started](docs/getting_started.md).
 
-> **No local GPU?** Training and simulation require a Linux machine with an Nvidia GPU.
-> See [Cloud GPU Setup with GlowsAI](TODO_GLOWSAI_URL) for instructions on using cloud GPU instances.
-
 # Human Demonstration Data Processing
 
 1. **Installation**
