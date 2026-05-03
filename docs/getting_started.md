@@ -9,16 +9,21 @@ This project builds imitation-learning policies for robot manipulation tasks (cu
 1. **Record** human demonstrations using the UMI device
 2. **Process** recordings through a SLAM reconstruction pipeline
 3. **Simulate** — generate synthetic training data in Isaac Lab
-4. **Train** a diffusion policy with LeRobot
+4. **Train** a policy model with LeRobot
 5. **Evaluate** the trained policy in the simulator (rollout)
 
 ## Where to run what
 
 | Stage | Environment | Why |
 |-------|-------------|-----|
-| UMI recording + SLAM processing | Local machine (no GPU needed) | Lightweight video + SLAM pipeline |
-| Simulation (datagen + rollout) | Docker container (Nvidia GPU) | Isaac Sim / Isaac Lab / Vulkan stack pinned in image |
-| Training (`lerobot-train`) | Host machine (Nvidia GPU) | Docker adds I/O overhead — train natively for throughput |
+| UMI recording + SLAM processing | Local machine  | Lightweight video + SLAM pipeline |
+| Simulation (datagen + rollout) | GlowsAI | Isaac Sim / Isaac Lab / Vulkan stack pinned in image |
+| Training (`lerobot-train`) | GlowsAI | Docker adds I/O overhead — train natively for throughput |
+
+> **GlowsAI VNC terminal:** When using the VNC desktop terminal on GlowsAI, switch to the `glows` user first:
+> ```bash
+> su - glows
+> ```
 
 For details on the repo layout and developer setup, see [Developer Introduction](dev/introduction.md).
 
@@ -89,6 +94,10 @@ Each session needs three kinds of footage recorded with the same GoPro camera:
 After recording:
 
 1. Create a directory under `data/`. Suggested name: `YYYYMMDD-taskname`.
+   Recommended task names:
+   - `kitchen` — cup stacking
+   - `dining_room` — cutlery arrangement
+   - `living_room` — toy blocks collection
 2. Place all recorded videos in `data/YYYYMMDD-taskname/raw_videos/`.
 
 For detailed recording tips and failure mode guidance, see [UMI Pipeline](umi_pipeline.md).
