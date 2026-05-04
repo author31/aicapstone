@@ -77,7 +77,7 @@ _FRANKA_REST_JOINT_POS = {
 }
 
 # Pick order: fork first (place on +y / left of plate), then knife (place on -y / right)
-_PICK_ORDER = (_FORK_NAME, _KNIFE_NAME)
+_PICK_ORDER = (_KNIFE_NAME, _FORK_NAME)
 _PLACE_X_SIGNS = (+1.0, -1.0)  # fork → +x of plate, knife → -x of plate
 
 _PHASE_DURATIONS_PER_OBJECT = (180, 130, 20, 160, 170, 15, 30)
@@ -221,8 +221,8 @@ class CutleryArrangementStateMachine(StateMachineBase):
 
         done = torch.logical_and(done, fork_dist_xy <= _SUCCESS_MAX_DIST_XY)
         done = torch.logical_and(done, knife_dist_xy <= _SUCCESS_MAX_DIST_XY)
-        done = torch.logical_and(done, fork_pos[:, 0] > plate_pos[:, 0])
-        done = torch.logical_and(done, knife_pos[:, 0] < plate_pos[:, 0])
+        done = torch.logical_and(done, fork_pos[:, 0] < plate_pos[:, 0]) # fork left
+        done = torch.logical_and(done, knife_pos[:, 0] > plate_pos[:, 0]) # knife right
 
         return bool(done.all().item())
 
@@ -253,6 +253,7 @@ class CutleryArrangementStateMachine(StateMachineBase):
 
         target_quat_w = self._gripper_down_quat_w(
             obj_quat_w,
+            obj_name,
             num_envs,
             device,
             obj_quat_w.dtype,
@@ -441,17 +442,20 @@ class CutleryArrangementStateMachine(StateMachineBase):
     def _gripper_down_quat_w(
         self,
         obj_quat_w: torch.Tensor,
+        obj_name: str,
         num_envs: int,
         device: torch.device,
         dtype: torch.dtype,
         yaw_offset: float = 0.0,
     ) -> torch.Tensor:
         if self._gripper_down_yaw_w is None or self._gripper_down_yaw_w.shape[0] != num_envs:
-            base_yaw = _yaw_from_quat_wxyz(obj_quat_w).to(device=device, dtype=dtype)
+            base_yaw = _yaw_from_quat_wxyz(obj_quat_w).to(device=device, dtype=dtype) # gripper aligned with the orientation of the object
             self._gripper_down_yaw_offset_w = torch.empty(num_envs, device=device, dtype=dtype).uniform_(
                 _GRIPPER_DOWN_YAW_OFFSET_RANGE[0],
                 _GRIPPER_DOWN_YAW_OFFSET_RANGE[1],
             )
+            if obj_name == _KNIFE_NAME:
+                base_yaw = torch.zeros_like(base_yaw) # fixed direction
             self._gripper_down_yaw_w = (
                 base_yaw + yaw_offset + self._gripper_down_yaw_offset_w
             ).clone()
