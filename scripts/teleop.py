@@ -60,6 +60,12 @@ parser.add_argument(
     "--num_demos", type=int, default=0, help="Number of demonstrations to record. Set to 0 for infinite."
 )
 
+parser.add_argument(
+    "--object_poses",
+    type=str,
+    default=None,
+    help="Path to the per-episode object_poses.json (UMI schema). Episode count = number of status=='full' entries.",
+)
 parser.add_argument("--recalibrate", action="store_true", help="recalibrate SO101-Leader or Bi-SO101Leader")
 parser.add_argument("--quality", action="store_true", help="whether to enable quality render mode.")
 parser.add_argument("--use_lerobot_recorder", action="store_true", help="whether to use lerobot recorder.")
@@ -80,7 +86,13 @@ simulation_app = app_launcher.app
 import os
 import time
 
+import numpy as np
+
+import math as _math
+
 import simulator.tasks  # noqa: F401
+from simulator.tasks.external import resolve_task
+from simulator.utils.object_poses_loader import load_episode_poses
 
 import gymnasium as gym
 import torch
@@ -136,6 +148,25 @@ def manual_terminate(env: ManagerBasedRLEnv | DirectRLEnv, success: bool):
         env.cfg.return_success_status = success
 
 
+def _apply_episode_poses(env, poses):
+    """Write per-object root poses for the current episode into the sim."""
+    device = env.device
+    for name, (pos, quat) in poses.items():
+        obj = env.scene[name]
+        pose_tensor = torch.tensor(
+            [[pos[0], pos[1], pos[2], quat[0], quat[1], quat[2], quat[3]]],
+            device=device,
+            dtype=torch.float32,
+        ).repeat(env.num_envs, 1)
+        obj.write_root_pose_to_sim(pose_tensor)
+        w, x, y, z = quat
+        yaw_deg = _math.degrees(_math.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z)))
+        print(
+            f"  [pose] {name}: pos=({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f}) "
+            f"yaw={yaw_deg:+6.1f}°"
+        )
+
+
 def main():  # noqa: C901
     """Running lerobot teleoperation with leisaac manipulation environment."""
 
@@ -146,10 +177,25 @@ def main():  # noqa: C901
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs)
+    task_name = resolve_task(args_cli.task)
+    args_cli.task = task_name
+    env_cfg = parse_env_cfg(task_name, device=args_cli.device, num_envs=args_cli.num_envs)
     env_cfg.use_teleop_device(args_cli.teleop_device)
     env_cfg.seed = args_cli.seed if args_cli.seed is not None else int(time.time())
-    task_name = args_cli.task
+
+    # load object poses if provided
+    episodes = []
+    if args_cli.object_poses:
+        object_pose_cfg = getattr(env_cfg, "object_pose_cfg", None)
+        if object_pose_cfg is None:
+            raise ValueError(
+                f"Task '{task_name}' env_cfg has no 'object_pose_cfg' attribute; "
+                "cannot resolve anchor frame for --object_poses."
+            )
+        episodes = load_episode_poses(args_cli.object_poses, object_pose_cfg)
+        if not episodes:
+            raise ValueError(f"No 'status==full' episodes in {args_cli.object_poses}; nothing to replay.")
+        print(f"Loaded {len(episodes)} replay episodes from {args_cli.object_poses}")
 
     if args_cli.quality:
         env_cfg.sim.render.antialiasing_mode = "FXAA"
@@ -236,14 +282,61 @@ def main():  # noqa: C901
             env.recorder_manager.compression = "lzf"
 
     # create controller
-    if args_cli.teleop_device == "keyboard":
-        from leisaac.devices import SO101Keyboard
+    target_frame = getattr(env.cfg, "teleop_target_frame", "gripper")
 
-        teleop_interface = SO101Keyboard(env, sensitivity=args_cli.sensitivity)
+    robot_name = getattr(env.cfg, "robot_name", "")
+
+    if args_cli.teleop_device == "keyboard":
+        if robot_name == "franka_panda":
+            from simulator.devices import FrankaKeyboard
+
+            teleop_interface = FrankaKeyboard(env, sensitivity=args_cli.sensitivity)
+        else:
+            from leisaac.devices import SO101Keyboard
+            from leisaac.devices.device_base import Device
+
+            if target_frame != "gripper":
+
+                class _KeyboardAdapter(SO101Keyboard):
+                    def __init__(self, env, sensitivity=1.0):
+                        Device.__init__(self, env, "keyboard")
+                        self.pos_sensitivity = 0.01 * sensitivity
+                        self.joint_sensitivity = 0.15 * sensitivity
+                        self.rot_sensitivity = 0.15 * sensitivity
+                        self._create_key_bindings()
+                        self._delta_action = np.zeros(8)
+                        self.asset_name = "robot"
+                        self.robot_asset = self.env.scene[self.asset_name]
+                        self.target_frame = target_frame
+                        body_idxs, _ = self.robot_asset.find_bodies(self.target_frame)
+                        self.target_frame_idx = body_idxs[0]
+
+                teleop_interface = _KeyboardAdapter(env, sensitivity=args_cli.sensitivity)
+            else:
+                teleop_interface = SO101Keyboard(env, sensitivity=args_cli.sensitivity)
     elif args_cli.teleop_device == "gamepad":
         from leisaac.devices import SO101Gamepad
+        from leisaac.devices.device_base import Device
 
-        teleop_interface = SO101Gamepad(env, sensitivity=args_cli.sensitivity)
+        if target_frame != "gripper":
+
+            class _GamepadAdapter(SO101Gamepad):
+                def __init__(self, env, sensitivity=1.0):
+                    Device.__init__(self, env, "gamepad")
+                    self.pos_sensitivity = 0.01 * sensitivity
+                    self.joint_sensitivity = 0.15 * sensitivity
+                    self.rot_sensitivity = 0.15 * sensitivity
+                    self._create_key_bindings()
+                    self._delta_action = np.zeros(8)
+                    self.asset_name = "robot"
+                    self.robot_asset = self.env.scene[self.asset_name]
+                    self.target_frame = target_frame
+                    body_idxs, _ = self.robot_asset.find_bodies(self.target_frame)
+                    self.target_frame_idx = body_idxs[0]
+
+            teleop_interface = _GamepadAdapter(env, sensitivity=args_cli.sensitivity)
+        else:
+            teleop_interface = SO101Gamepad(env, sensitivity=args_cli.sensitivity)
     elif args_cli.teleop_device == "so101leader":
         from leisaac.devices import SO101Leader
 
@@ -298,6 +391,13 @@ def main():  # noqa: C901
     env.reset()
     teleop_interface.reset()
 
+    # apply first episode poses if available
+    next_episode_idx = 0
+    if episodes:
+        _apply_episode_poses(env, episodes[next_episode_idx])
+        next_episode_idx = 1
+        print(f"[teleop] Episode 1/{len(episodes)} poses applied.")
+
     resume_recorded_demo_count = 0
     if args_cli.record and args_cli.resume:
         resume_recorded_demo_count = env.recorder_manager._dataset_file_handler.get_num_episodes()
@@ -330,6 +430,12 @@ def main():  # noqa: C901
                         manual_terminate(env, True)
                 if should_reset_recording_instance:
                     env.reset()
+                    if episodes and next_episode_idx < len(episodes):
+                        _apply_episode_poses(env, episodes[next_episode_idx])
+                        next_episode_idx += 1
+                        print(f"[teleop] Episode {next_episode_idx}/{len(episodes)} poses applied.")
+                    elif episodes:
+                        print(f"[teleop] All {len(episodes)} episodes exhausted.")
                     should_reset_recording_instance = False
                     if start_record_state:
                         if args_cli.record:

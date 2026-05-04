@@ -34,3 +34,7 @@ dependencies/IsaacLab/**/*.egg-info/
 
 
 datasets/*
+
+# Private external task files
+private_tasks/*
+!private_tasks/.gitkeep
