@@ -243,7 +243,7 @@ def _on_episode_done(
         print("Success check failed:", e)
         success = False
 
-    print("Episode success!" if success else "Episode failed!")
+    # print("Episode success!" if success else "Episode failed!")
 
     if start_record_state:
         if args_cli.record:
@@ -268,7 +268,7 @@ def _on_episode_done(
 
     if next_episode_idx >= total_episodes:
         print(f"Replayed all {total_episodes} episodes. Exiting the app.")
-        return next_episode_idx, current_recorded_demo_count, start_record_state, True
+        return next_episode_idx, current_recorded_demo_count, start_record_state, True, success
 
     env.reset()
     sm.reset()
@@ -276,7 +276,7 @@ def _on_episode_done(
     _apply_episode_poses(env, episodes[next_episode_idx])
     next_episode_idx += 1
 
-    return next_episode_idx, current_recorded_demo_count, start_record_state, False
+    return next_episode_idx, current_recorded_demo_count, start_record_state, False, success
 
 
 def main():
@@ -364,7 +364,8 @@ def main():
         print("\n[INFO] KeyboardInterrupt (Ctrl+C) detected. Cleaning up resources...")
 
     original_sigint_handler = signal.signal(signal.SIGINT, signal_handler)
-
+    cnt = 1
+    success_ID = []
     try:
         while simulation_app.is_running() and not simulation_app.is_exiting() and not interrupted:
             with torch.inference_mode():
@@ -377,6 +378,7 @@ def main():
                         current_recorded_demo_count,
                         start_record_state,
                         should_break,
+                        success,
                     ) = _on_episode_done(
                         env,
                         sm,
@@ -387,6 +389,12 @@ def main():
                         current_recorded_demo_count,
                         start_record_state,
                     )
+                    if success:
+                        print(f"\033[92m[Data Usage]{cnt}/{len(episodes)} success.\033[0m")
+                        success_ID.append(cnt)
+                        cnt += 1
+                    else:
+                        print(f"\033[91m[Data Usage]{cnt}/{len(episodes)} fail.\033[0m")
                     if should_break:
                         break
                 else:
@@ -426,6 +434,8 @@ def main():
             env.recorder_manager.finalize()
         env.close()
         simulation_app.close()
+    
+    print(success_ID)
 
 
 if __name__ == "__main__":
