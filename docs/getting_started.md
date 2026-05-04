@@ -63,7 +63,9 @@ uv sync
 source .venv/bin/activate
 
 # Build and launch the Isaac Lab container (simulation, datagen, rollout)
-make launch-isaaclab
+# Pick the target matching your GlowsAI GPU:
+make launch-isaaclab-glowsai-4090   # RTX 4090
+make launch-isaaclab-glowsai-l40s   # L40S
 ```
 
 ### Hugging Face login
@@ -150,8 +152,17 @@ This file contains per-episode object poses that drive the simulator's scene set
 
 ### Launch the Isaac Lab container
 
+Pick the target matching your GlowsAI GPU:
+
+| Target | GPU |
+|--------|-----|
+| `make launch-isaaclab-glowsai-4090` | RTX 4090 (VNC display :1) |
+| `make launch-isaaclab-glowsai-l40s` | L40S (VNC display :1) |
+
 ```bash
-make launch-isaaclab
+# GlowsAI — pick one:
+make launch-isaaclab-glowsai-4090
+make launch-isaaclab-glowsai-l40s
 ```
 
 All remaining commands in this step run **inside the container**.
