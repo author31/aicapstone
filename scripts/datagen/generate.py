@@ -243,7 +243,7 @@ def _on_episode_done(
         print("Success check failed:", e)
         success = False
 
-    # print("Episode success!" if success else "Episode failed!")
+    print("Episode success!" if success else "Episode failed!")
 
     if start_record_state:
         if args_cli.record:
