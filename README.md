@@ -2,6 +2,8 @@
 
 Sim-to-real imitation-learning pipeline for robot manipulation tasks. Record human demonstrations with UMI, process them through SLAM, generate synthetic data in Isaac Lab, train a diffusion policy with LeRobot, and evaluate it in simulation.
 
+> **Platform:** Linux only.
+
 For a complete step-by-step walkthrough, see [Getting Started](docs/getting_started.md).
 
 # Human Demonstration Data Processing
