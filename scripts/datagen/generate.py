@@ -434,8 +434,8 @@ def main():
             env.recorder_manager.finalize()
         env.close()
         simulation_app.close()
+        print(success_ID)
     
-    print(success_ID)
 
 
 if __name__ == "__main__":
