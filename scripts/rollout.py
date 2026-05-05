@@ -95,7 +95,6 @@ from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 from lerobot.policies.utils import populate_queues
 from lerobot.utils.constants import ACTION, OBS_IMAGES
 
-from leisaac.utils.constant import FRANKA_JOINT_NAMES, SINGLE_ARM_JOINT_NAMES
 from leisaac.utils.env_utils import (
     dynamic_reset_gripper_effort_limit_sim,
     get_task_type,
@@ -108,6 +107,7 @@ from leisaac.utils.robot_utils import (
 import leisaac  # noqa: F401
 import simulator.tasks  # noqa: F401
 from simulator.tasks.external import resolve_task
+from simulator import FRANKA_JOINT_NAMES
 
 
 def setup_dual_viewports():
