@@ -37,11 +37,6 @@ PER_OBJECT_YAW_OFFSET: dict[str, float] = {
     "blue_block": math.pi / 2.0,
     "red_block": math.pi / 2.0,
 }
-# Per-USD roll (rad). +π/2 stands the red triangle USD up on its edge instead
-# of lying flat.
-PER_OBJECT_ROLL_OFFSET: dict[str, float] = {
-    "red_block": 3.0 * math.pi / 2.0,
-}
 
 
 @configclass
@@ -179,6 +174,5 @@ class ToyBlocksCollectionEnvCfg(SingleArmFrankaTaskEnvCfg):
             object_roll=OBJECT_ROLL,
             object_pitch=OBJECT_PITCH,
             per_object_yaw_offset=PER_OBJECT_YAW_OFFSET,
-            per_object_roll_offset=PER_OBJECT_ROLL_OFFSET,
             use_fixed_yaw=True,
         )

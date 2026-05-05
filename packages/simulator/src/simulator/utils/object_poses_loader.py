@@ -57,11 +57,6 @@ class ObjectPoseConfig:
     object_roll: float = 0.0
     object_pitch: float = 0.0
     per_object_yaw_offset: Mapping[str, float] = field(default_factory=dict)
-    # Optional per-asset roll / pitch (rad) added on top of the task-wide
-    # ``object_roll`` / ``object_pitch``. Use to make a specific USD spawn in
-    # a different orientation, e.g. a block lying flat → standing upright.
-    per_object_roll_offset: Mapping[str, float] = field(default_factory=dict)
-    per_object_pitch_offset: Mapping[str, float] = field(default_factory=dict)
     use_fixed_yaw: bool = False
     # Names present in the JSON that should be silently skipped by the loader.
     # Use this for objects detected by UMI that you want to spawn at a fixed
@@ -164,13 +159,9 @@ def load_episode_poses(
                 yaw_w = anchor_yaw + _rotvec_to_yaw(rvec) + per_object
 
             pos = (x_w, y_w, float(config.object_z))
-            roll_w = float(config.object_roll) + float(
-                config.per_object_roll_offset.get(name, 0.0)
+            quat = _euler_xyz_to_quat_wxyz(
+                float(config.object_roll), float(config.object_pitch), yaw_w
             )
-            pitch_w = float(config.object_pitch) + float(
-                config.per_object_pitch_offset.get(name, 0.0)
-            )
-            quat = _euler_xyz_to_quat_wxyz(roll_w, pitch_w, yaw_w)
             episode_poses[name] = (pos, quat)
 
         missing = expected_names - set(episode_poses)
