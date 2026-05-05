@@ -255,6 +255,7 @@ For the full procedure including model download and flag reference, see [LeRobot
 |----------|-------------|
 | [Developer Introduction](dev/introduction.md) | Repo layout, environment setup, where to run what |
 | [Isaac Lab + LeIsaac Configuration Tutorial](isaaclab_leisaac_tutorial.md) | Configuring Isaac Lab with LeIsaac |
+| [Keyboard Teleoperation](keyboard_teleoperation.md) | Drive the Franka from the keyboard for debugging or recording |
 | [LeRobot Dataset Visualizer](lerobot_dataset_visualizer.md) | Inspecting datasets before training |
 | [LeRobot Checkpoint Format](lerobot-model-format.md) | Understanding model checkpoint structure |
 | [Standalone Env Config Export](standalone_env_config_export.md) | Exporting environment configs as standalone files |

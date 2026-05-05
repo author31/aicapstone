@@ -95,7 +95,6 @@ from lerobot.policies.factory import get_policy_class, make_pre_post_processors
 from lerobot.policies.utils import populate_queues
 from lerobot.utils.constants import ACTION, OBS_IMAGES
 
-from leisaac.utils.constant import FRANKA_JOINT_NAMES, SINGLE_ARM_JOINT_NAMES
 from leisaac.utils.env_utils import (
     dynamic_reset_gripper_effort_limit_sim,
     get_task_type,
@@ -107,6 +106,8 @@ from leisaac.utils.robot_utils import (
 
 import leisaac  # noqa: F401
 import simulator.tasks  # noqa: F401
+from simulator.tasks.external import resolve_task
+from simulator import FRANKA_JOINT_NAMES
 
 
 def setup_dual_viewports():
@@ -404,8 +405,10 @@ def get_camera_infos(
 
 
 def main():
-    env_cfg = parse_env_cfg(args_cli.task, device=args_cli.device, num_envs=1)
-    task_type = get_task_type(args_cli.task)
+    task_id = resolve_task(args_cli.task)
+    args_cli.task = task_id
+    env_cfg = parse_env_cfg(task_id, device=args_cli.device, num_envs=1)
+    task_type = get_task_type(task_id)
     robot_name = getattr(env_cfg, "robot_name", None)
     policy_task_type = "franka_panda" if robot_name == "franka_panda" else task_type
     teleop_device = "keyboard" if policy_task_type == "franka_panda" else task_type
@@ -419,7 +422,7 @@ def main():
     max_episode_count = args_cli.eval_rounds
     env_cfg.recorders = None
 
-    env: ManagerBasedRLEnv = gym.make(args_cli.task, cfg=env_cfg).unwrapped
+    env: ManagerBasedRLEnv = gym.make(task_id, cfg=env_cfg).unwrapped
     obs_dict, _ = env.reset()
 
     language_instruction = args_cli.policy_language_instruction
