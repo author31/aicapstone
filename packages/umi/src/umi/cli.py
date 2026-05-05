@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import click
@@ -77,6 +78,44 @@ def visualize_slam_gui(video_path: str, session_dir: str, docker_image: str,
     except Exception as e:
         click.echo(f"✗ Error: {e}", err=True)
         raise click.ClickException(str(e))
+
+
+@cli.command()
+@click.argument("session_dir_1", type=click.Path(exists=True))
+@click.argument("session_dir_2", type=click.Path(exists=True))
+@click.option("--output", "-o", type=click.Path(),
+              help="Override output session directory path.")
+def merge_object_poses(session_dir_1: str, session_dir_2: str, output: str):
+    """Merge object_poses.json files from two session directories into a new session directory."""
+    pose_subpath = Path("demos") / "mapping" / "object_poses.json"
+    dir1, dir2 = Path(session_dir_1), Path(session_dir_2)
+    path1, path2 = dir1 / pose_subpath, dir2 / pose_subpath
+
+    datasets = []
+    for p, d in [(path1, session_dir_1), (path2, session_dir_2)]:
+        if not p.exists():
+            raise click.ClickException(f"object_poses.json not found in {d}/demos/mapping/")
+        try:
+            data = json.loads(p.read_text())
+        except json.JSONDecodeError as e:
+            raise click.ClickException(f"Invalid JSON in {p}: {e}")
+        if not isinstance(data, list):
+            raise click.ClickException(f"Expected JSON array in {p}, got {type(data).__name__}")
+        datasets.append(data)
+
+    merged = datasets[0] + datasets[1]
+
+    if output:
+        out_dir = Path(output)
+    else:
+        out_dir = dir1.parent / f"merged_{dir1.name}_{dir2.name}"
+
+    out_path = out_dir / pose_subpath
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(merged, indent=4) + "\n")
+
+    click.echo(f"Merged {len(datasets[0])} + {len(datasets[1])} = {len(merged)} episodes")
+    click.echo(f"Output: {out_path}")
 
 
 if __name__ == "__main__":
