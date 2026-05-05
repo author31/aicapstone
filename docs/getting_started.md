@@ -32,12 +32,44 @@ For details on the repo layout and developer setup, see [Developer Introduction]
 - **Python 3.11** — required by the project (pinned in `.python-version`)
 - **[uv](https://docs.astral.sh/uv/)** — Python package manager used for this workspace
 - **Git** — with submodule support
-- **Docker** — required for simulation steps (Isaac Lab runs in a container)
+- **Docker + Docker Compose** — required for simulation steps (Isaac Lab runs in a container)
+- **exiftool** — used by the UMI pipeline for video metadata extraction
+- **ffmpeg** — used by the UMI pipeline for video processing
 - **Linux machine with Nvidia GPU + driver** — required for simulation and training. Verify with `nvidia-smi`.
 - **Hugging Face account** — datasets and model checkpoints are stored on the Hub. Create a token at <https://huggingface.co/docs/hub/en/security-tokens>.
 
 > **No local GPU?** Training and simulation require a Linux machine with an Nvidia GPU.
 > See [Cloud GPU Setup with GlowsAI](https://docs.google.com/presentation/d/1xPHm3gNNvLbX7aOWnY_xW5dfVLEa9XiBuskMbRsgxI8/edit?usp=sharing) for instructions on using cloud GPU instances.
+
+### Installing prerequisites
+
+```bash
+# Docker
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# Add your user to the docker group (avoids needing sudo for docker commands)
+sudo usermod -aG docker $USER
+newgrp docker
+
+# exiftool and ffmpeg
+sudo apt-get install -y libimage-exiftool-perl ffmpeg
+```
+
+Verify installations:
+
+```bash
+docker --version
+docker compose version
+exiftool -ver
+ffmpeg -version
+```
 
 ## Installation
 
