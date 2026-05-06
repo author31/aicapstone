@@ -10,7 +10,58 @@
 """Run local LeRobot policy inference in the same process as Isaac Sim."""
 
 """Launch Isaac Sim Simulator first."""
+import json as _json
 import multiprocessing
+from pathlib import Path as _Path
+
+
+# Fields that newer LeRobot adds at training time but the inference-side
+# LeRobot installed in the worker image doesn't accept. They're all
+# training-only (LoRA, torch.compile, image-preproc) and safe to strip
+# from the checkpoint's config.json before from_pretrained() reads it.
+# Extend whenever draccus.utils.DecodingError surfaces a new field.
+_LEROBOT_INCOMPAT_CONFIG_FIELDS: tuple[str, ...] = (
+    "use_peft",
+    "resize_shape",
+    "crop_ratio",
+    "compile_model",
+    "compile_mode",
+)
+
+
+def _patch_lerobot_config(checkpoint_dir: str) -> None:
+    """Strip known-incompatible fields from <checkpoint>/config.json.
+
+    Idempotent — running twice is fine. Errors are swallowed; if config.json
+    is missing or unreadable the original from_pretrained call will still
+    surface a helpful message.
+    """
+    cfg_path = _Path(checkpoint_dir) / "config.json"
+    if not cfg_path.is_file():
+        return
+    try:
+        with cfg_path.open("r") as f:
+            cfg = _json.load(f)
+    except (OSError, ValueError) as exc:
+        print(f"[rollout] config.json read skipped: {exc}", flush=True)
+        return
+    stripped = [k for k in _LEROBOT_INCOMPAT_CONFIG_FIELDS if k in cfg]
+    if not stripped:
+        return
+    for k in stripped:
+        cfg.pop(k, None)
+    try:
+        with cfg_path.open("w") as f:
+            _json.dump(cfg, f, indent=2)
+        print(
+            f"[rollout] stripped LeRobot-incompatible config fields: {stripped}",
+            flush=True,
+        )
+    except OSError as exc:
+        print(f"[rollout] config.json patch skipped: {exc}", flush=True)
+
+
+
 
 if multiprocessing.get_start_method() != "spawn":
     multiprocessing.set_start_method("spawn", force=True)
@@ -263,8 +314,13 @@ class LeRobotSyncPolicy:
         self.camera_keys = list(camera_infos.keys())
 
         print(
-            f"Loading local LeRobot policy '{policy_type}' from {pretrained_name_or_path}..."
+            f"Loading local LeRobot policy '{policy_type}' from {pretrained_name_or_path}...",
+            flush=True,
         )
+        # Strip training-only fields that newer LeRobot adds but the
+        # inference-side LeRobot doesn't accept. Safe because these flags
+        # never affect inference. See _patch_lerobot_config above.
+        _patch_lerobot_config(pretrained_name_or_path)
         policy_class = get_policy_class(policy_type)
         self.policy = policy_class.from_pretrained(pretrained_name_or_path, local_files_only=True)
         self.policy.to(device)
@@ -280,7 +336,7 @@ class LeRobotSyncPolicy:
             },
             postprocessor_overrides={"device_processor": device_override},
         )
-        print("Local LeRobot policy is ready.")
+        print("Local LeRobot policy is ready.", flush=True)
 
     def reset(self):
         policy_reset = getattr(self.policy, "reset", None)
@@ -423,7 +479,19 @@ def main():
     env_cfg.recorders = None
 
     env: ManagerBasedRLEnv = gym.make(task_id, cfg=env_cfg).unwrapped
+
+    # Warm up the renderer before the first reset. Headless Isaac Sim with
+    # camera observations otherwise hangs the first env.reset() while the
+    # Vulkan / DLSS / shader pipeline compiles — the worker sees no output
+    # for several minutes and the eval looks dead. A handful of app updates
+    # forces shader compilation and material warm-up to happen here, where
+    # we can attribute it.
+    print("[rollout] warming up renderer (20 app updates)...", flush=True)
+    for _ in range(20):
+        simulation_app.update()
+    print("[rollout] resetting environment...", flush=True)
     obs_dict, _ = env.reset()
+    print("[rollout] env.reset() returned", flush=True)
 
     language_instruction = args_cli.policy_language_instruction
     if language_instruction is None:
@@ -431,6 +499,10 @@ def main():
 
     policy_obs_dict = preprocess_obs_dict(obs_dict["policy"], language_instruction)
     camera_infos = get_camera_infos(env, policy_obs_dict)
+    print(
+        f"[rollout] camera_infos = {camera_infos}; loading policy...",
+        flush=True,
+    )
 
     policy = LeRobotSyncPolicy(
         policy_type=get_policy_type(args_cli.policy_type),
