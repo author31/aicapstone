@@ -142,12 +142,24 @@ For detailed recording tips and failure mode guidance, see [UMI Pipeline](umi_pi
 
 **Recommended: run on your local machine.** This step does not require a GPU — it runs the SLAM reconstruction pipeline on CPU. Install the UMI package locally (see [UMI Pipeline only](#umi-pipeline-only-local-machine-no-gpu)) before proceeding.
 
+### Device-specific pipeline configurations
+
+Each GoPro device has its own camera intrinsics calibration. Use the pipeline configuration that matches your device:
+
+| GoPro device | Verify config | Intrinsics file |
+|--------------|---------------|-----------------|
+| 交2 | `verify_pipeline_C2.yaml` | `gopro13_intrinsics_2_7k_C2.json` |
+| 交6 | `verify_pipeline_C6.yaml` | `gopro13_intrinsics_2_7k_C6.json` |
+| 交9 | `verify_pipeline_C9.yaml` | `gopro13_intrinsics_2_7k_C9.json` |
+
+All configuration files are in `umi_pipeline_configs/` and reference intrinsics from `packages/umi/defaults/calibration/`. Using the wrong device config will produce incorrect ArUco detection and calibration results.
+
 ### 2a. Verify first
 
-The SLAM mapping stage is fragile. Run verification before the full pipeline to catch bad recordings early:
+The SLAM mapping stage is fragile. Run verification before the full pipeline to catch bad recordings early. **Use the config matching your GoPro device:**
 
 ```bash
-uv run umi run-slam-pipeline umi_pipeline_configs/verify_pipeline.yaml \
+uv run umi run-slam-pipeline umi_pipeline_configs/verify_pipeline_C2.yaml \
     --session-dir <demo_directory_name>
 ```
 
@@ -283,7 +295,7 @@ Loads your trained policy and runs it in the simulator to evaluate performance.
 
 ```bash
 # Inside the container
-python scripts/evaluation/rollout.py \
+python scripts/rollout.py \
     --task=HCIS-CupStacking-SingleArm-v0 \
     --policy_type=lerobot-diffusion \
     --policy_checkpoint_path=checkpoints/my_policy \
