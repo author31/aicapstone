@@ -176,6 +176,20 @@ hf upload ${HF_USER}/<repo_id> data/<demo_directory_name>/demos/mapping/object_p
 
 This file contains per-episode object poses that drive the simulator's scene setup in Step 3.
 
+### 2c. Merge object poses (optional)
+
+To combine object poses from multiple recording sessions into a single dataset:
+
+```bash
+uv run umi merge-object-poses data/<session_dir_1> data/<session_dir_2>
+```
+
+This creates a new session directory (e.g., `data/merged_<name1>_<name2>/`) containing the merged `demos/mapping/object_poses.json`. Use `--output`/`-o` to specify a custom output directory:
+
+```bash
+uv run umi merge-object-poses data/<session_dir_1> data/<session_dir_2> -o data/my_merged_session
+```
+
 ---
 
 ## Step 3: Generate Synthetic Data in Simulation
