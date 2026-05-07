@@ -1,5 +1,5 @@
 {
-    "final_reproj_error": 1.163205411866305,
+    "final_reproj_error": 1.409803955276291,
     "fps": 0.0,
     "image_height": 2028,
     "image_width": 2704,
@@ -13,8 +13,8 @@
         "radial_distortion_2": -0.09491546226691018,
         "radial_distortion_3": 0.07071933946748667,
         "radial_distortion_4": -0.016781626594410216,
-    "skew": 0
+        "skew": 0.0
     },
-    "nr_calib_images": 216,
+    "nr_calib_images": 0,
     "stabelized": false
 }
