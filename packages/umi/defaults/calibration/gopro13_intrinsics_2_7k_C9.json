@@ -1,20 +1,20 @@
 {
-    "final_reproj_error": 1.163205411866305,
+    "final_reproj_error": 1.8969945096913308,
     "fps": 0.0,
     "image_height": 2028,
     "image_width": 2704,
     "intrinsic_type": "FISHEYE",
     "intrinsics": {
-        "aspect_ratio": 1.002188259747757,
-        "focal_length": 916.8103239383695,
-        "principal_pt_x": 1370.3373144598352,
-        "principal_pt_y": 1027.157433197597,
-        "radial_distortion_1": 0.017975864281127824,
-        "radial_distortion_2": -0.09491546226691018,
-        "radial_distortion_3": 0.07071933946748667,
-        "radial_distortion_4": -0.016781626594410216,
-    "skew": 0
+        "aspect_ratio": 0.9995422616569187,
+        "focal_length": 939.9393047695886,
+        "principal_pt_x": 1350.545169424136,
+        "principal_pt_y": 1008.3205729181554,
+        "radial_distortion_1": -0.04898771945675372,
+        "radial_distortion_2": -0.05781706150766119,
+        "radial_distortion_3": 0.06166969686562887,
+        "radial_distortion_4": -0.02282852073395613,
+        "skew": 0.0
     },
-    "nr_calib_images": 216,
+    "nr_calib_images": 0,
     "stabelized": false
 }
