@@ -37,7 +37,7 @@
   instance: "umi.services.aruco_detection.ArucoDetectionService"
   inherit_config: true
   config:
-    camera_intrinsics_path: "packages/umi/defaults/calibration/gopro13_intrinsics_2_7k.json"
+    camera_intrinsics_path: "packages/umi/defaults/calibration/gopro13_intrinsics_2_7k_C2.json"
     aruco_config_path: "packages/umi/defaults/calibration/aruco_config.yaml"
 
 05_run_calibrations:
@@ -61,7 +61,7 @@
   config:
     task: "living_room"
     marker_size_m: 0.018
-    intrinsics_path: "defaults/calibration/gopro13_intrinsics_2_7k.json"
+    intrinsics_path: "defaults/calibration/gopro13_intrinsics_2_7k_C2.json"
     dataset_plan_filename: dataset_plan.pkl
 
 08_generate_replay_buffer:
