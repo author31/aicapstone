@@ -172,13 +172,19 @@ RuntimeError: SLAM mapping failed. Check logs at datasets/team_asia/demos/mappin
 
 ### 2b. Build dataset
 
-Once verification passes:
+Once verification passes. **Use the config matching your GoPro device:**
 
 ```bash
-uv run umi run-slam-pipeline umi_pipeline_configs/build_dataset.yaml \
+uv run umi run-slam-pipeline umi_pipeline_configs/build_dataset_C2.yaml \
     --session-dir <demo_directory_name> \
     --task <kitchen|dining_room|living_room>
 ```
+
+| GoPro device | Build dataset config |
+|--------------|----------------------|
+| 交2 | `build_dataset_C2.yaml` |
+| 交6 | `build_dataset_C6.yaml` |
+| 交9 | `build_dataset_C9.yaml` |
 
 Upload the `object_poses.json` produced by the pipeline to Hugging Face Hub:
 
