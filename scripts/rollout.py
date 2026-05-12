@@ -312,6 +312,25 @@ class _EvalVideoRecorder:
             self._spawn(w, h)
             if self._broken or self.proc is None:
                 return
+
+        # Diagnostic: hash a few frames' raw bytes so we can tell, without
+        # decoding the resulting MP4, whether the obs cameras are actually
+        # producing different content per capture. If the hash is the same
+        # for many consecutive frames the recorder is OK and the camera
+        # render didn't advance (sim / sensor cadence bug). EVAL_DEBUG_ACTIONS
+        # gates the print so production runs stay quiet.
+        if os.environ.get("EVAL_DEBUG_ACTIONS", "").strip().lower() == "true" \
+                and self.frames_written < 20:
+            import hashlib as _hl
+            w_hash = _hl.md5(w_arr.tobytes()).hexdigest()[:10]
+            f_hash = _hl.md5(f_arr.tobytes()).hexdigest()[:10]
+            print(
+                f"[recorder frame={self.frames_written}] "
+                f"wrist md5={w_hash} mean={w_arr.mean():.2f} "
+                f"front md5={f_hash} mean={f_arr.mean():.2f}",
+                flush=True,
+            )
+
         try:
             self.proc.stdin.write(frame.tobytes())
             self.frames_written += 1
