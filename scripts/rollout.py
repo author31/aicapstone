@@ -660,6 +660,20 @@ def main():
     capture_stride = max(1, args_cli.step_hz // max(1, args_cli.video_fps))
     sim_step_counter = 0
 
+    # Diagnostic: when EVAL_DEBUG_ACTIONS=true, print the actual action
+    # values + joint_pos for the first N sim steps of episode 1 so the
+    # admin can tell at a glance whether the policy is outputting near-
+    # zero (model collapsed), constant (bad checkpoint), or genuinely
+    # varying values (policy is fine — investigate env / action interp).
+    debug_actions = os.environ.get("EVAL_DEBUG_ACTIONS", "").strip().lower() == "true"
+    debug_steps_cap = int(os.environ.get("EVAL_DEBUG_ACTION_STEPS", "12"))
+    if debug_actions:
+        print(
+            f"[debug-action] enabled — will dump action+joint_pos for "
+            f"first {debug_steps_cap} sim steps of episode 1",
+            flush=True,
+        )
+
     success_count, episode_count = 0, 1
     while max_episode_count <= 0 or episode_count <= max_episode_count:
         print(f"[Evaluation] Evaluating episode {episode_count}...")
@@ -677,6 +691,27 @@ def main():
                     obs_dict["policy"], language_instruction
                 )
                 actions = policy.get_action(policy_obs_dict).to(env.device)
+                if (debug_actions and episode_count == 1
+                        and sim_step_counter < debug_steps_cap):
+                    # Dump the predicted chunk (T, 1, action_dim) plus
+                    # current joint_pos so we can tell at a glance
+                    # whether the policy is actually trying to move.
+                    try:
+                        a_np = actions.detach().cpu().numpy()
+                        first_action = a_np[0, 0].tolist() if a_np.size else []
+                        action_mean = float(a_np.mean()) if a_np.size else 0.0
+                        action_std = float(a_np.std()) if a_np.size else 0.0
+                        jp = obs_dict["policy"].get("joint_pos")
+                        jp_list = jp.detach().cpu().flatten().tolist() if jp is not None else []
+                        print(
+                            f"[debug-action step={sim_step_counter}] "
+                            f"action[0]={[round(v, 4) for v in first_action]} "
+                            f"chunk_mean={action_mean:.4f} chunk_std={action_std:.4f} "
+                            f"joint_pos={[round(v, 4) for v in jp_list[:9]]}",
+                            flush=True,
+                        )
+                    except Exception as _exc:
+                        print(f"[debug-action] print failed: {_exc}", flush=True)
                 for action_index in range(
                     min(args_cli.policy_action_horizon, actions.shape[0])
                 ):
