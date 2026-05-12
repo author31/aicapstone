@@ -695,21 +695,56 @@ def main():
                 actions = policy.get_action(policy_obs_dict).to(env.device)
                 if (debug_actions and episode_count == 1
                         and sim_step_counter < debug_steps_cap):
-                    # Dump the predicted chunk (T, 1, action_dim) plus
-                    # current joint_pos so we can tell at a glance
-                    # whether the policy is actually trying to move.
+                    # Dump the predicted chunk + current physical state +
+                    # PD target. Comparing the three columns settles
+                    # any "is the action manager forwarding the policy
+                    # output?" question:
+                    #
+                    #   action          ← what the policy emitted
+                    #   joint_pos_target← what the PD controller was
+                    #                    asked to track (i.e. what
+                    #                    env's action manager translated
+                    #                    the action into)
+                    #   joint_pos       ← where the joint actually is
+                    #   joint_vel       ← how fast joints are moving
+                    #
+                    # If action ≈ joint_pos_target the env is faithful;
+                    # then any motion mismatch is purely policy + PD.
                     try:
                         a_np = actions.detach().cpu().numpy()
                         first_action = a_np[0, 0].tolist() if a_np.size else []
                         action_mean = float(a_np.mean()) if a_np.size else 0.0
                         action_std = float(a_np.std()) if a_np.size else 0.0
+
+                        def _flat_round(t, k=4, n=9):
+                            if t is None:
+                                return []
+                            return [round(v, k) for v in
+                                    t.detach().cpu().flatten().tolist()[:n]]
+
                         jp = obs_dict["policy"].get("joint_pos")
-                        jp_list = jp.detach().cpu().flatten().tolist() if jp is not None else []
+                        jpt = obs_dict["policy"].get("joint_pos_target")
+                        jv = obs_dict["policy"].get("joint_vel")
+
                         print(
                             f"[debug-action step={sim_step_counter}] "
                             f"action[0]={[round(v, 4) for v in first_action]} "
-                            f"chunk_mean={action_mean:.4f} chunk_std={action_std:.4f} "
-                            f"joint_pos={[round(v, 4) for v in jp_list[:9]]}",
+                            f"chunk_mean={action_mean:.4f} chunk_std={action_std:.4f}",
+                            flush=True,
+                        )
+                        print(
+                            f"[debug-action step={sim_step_counter}]   "
+                            f"joint_pos       ={_flat_round(jp)}",
+                            flush=True,
+                        )
+                        print(
+                            f"[debug-action step={sim_step_counter}]   "
+                            f"joint_pos_target={_flat_round(jpt)}",
+                            flush=True,
+                        )
+                        print(
+                            f"[debug-action step={sim_step_counter}]   "
+                            f"joint_vel       ={_flat_round(jv)}",
                             flush=True,
                         )
                     except Exception as _exc:
